@@ -1,0 +1,1658 @@
+{
+  "backupFormat": "card-recommender-backup",
+  "backupVersion": 3,
+  "appVersion": 4,
+  "exportedAt": "2026-11-07T13:36:46.683Z",
+  "state": {
+    "version": 4,
+    "rules": [
+      {
+        "id": "rule-super-transit",
+        "name": "支付宝超级出行卡（1019）9051",
+        "platform": "transport",
+        "scene": "subway",
+        "scenes": [
+          "subway"
+        ],
+        "channel": "alipay",
+        "type": "rate",
+        "rate": 50,
+        "cap": 2,
+        "min": 0,
+        "fixed": 0,
+        "dateStart": "2026-10-19",
+        "dateEnd": "2026-10-28",
+        "start": "06:30",
+        "end": "10:00",
+        "limit": 1,
+        "notes": "已知规则：交通出行中的地铁场景，支付渠道为支付宝，06:30–10:00，五折，最高优惠 2 元，每天 1 次。活动有效期、用户资格及是否需要额外领取/报名尚待确认。"
+      },
+      {
+        "id": "id-mvs06hrk-2fho6u",
+        "name": "交通银行数币乘车码-1.6",
+        "platform": "transport",
+        "scene": "subway",
+        "scenes": [
+          "subway"
+        ],
+        "channel": "transit-code",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 0,
+        "fixed": 1.6,
+        "dateStart": "2026-10-01",
+        "dateEnd": "2026-12-10",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "数字人民币->乘车码"
+      },
+      {
+        "id": "id-mvs0biyd-lh0kv0",
+        "name": "云闪付上海之夏地铁1.01-1",
+        "platform": "transport",
+        "scene": "subway",
+        "channel": "unionpay",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 1.01,
+        "fixed": 1,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "云闪付->玩赚中心->上海之夏 领券\n云闪付->出行->乘车码\n10次/月"
+      },
+      {
+        "id": "id-mvs0ejde-4qgbor",
+        "name": "农业银行信用卡1.01-1",
+        "platform": "transport",
+        "scene": "subway",
+        "channel": "unionpay",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 1.01,
+        "fixed": 1,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-10-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "云闪付->出行->乘车码\n10次/月"
+      },
+      {
+        "id": "id-mvs0i72m-s45hsh",
+        "name": "光大信用卡2-0.99",
+        "platform": "transport",
+        "scene": "subway",
+        "scenes": [
+          "subway",
+          "bus"
+        ],
+        "channel": "alipay",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 2,
+        "fixed": 0.99,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-12-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "支付宝->出行\n5次/月"
+      },
+      {
+        "id": "id-mvs0kltz-9keq5q",
+        "name": "兴业数币乘车码2-1",
+        "platform": "transport",
+        "scene": "subway",
+        "channel": "transit-code",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 2,
+        "fixed": 1,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-10-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "数字人民币->乘车码\n15次/月"
+      },
+      {
+        "id": "id-mvs0ppjl-ip6p0q",
+        "name": "建行1分钱五折1元封顶",
+        "platform": "transport",
+        "scene": "subway",
+        "channel": "alipay",
+        "type": "rate",
+        "rate": 50,
+        "cap": 1,
+        "min": 0,
+        "fixed": 0,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-12-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "中国建设银行->惠省钱\n支付宝->出行->乘车码\n4次/月"
+      },
+      {
+        "id": "id-mvs0sqnb-bjzj6a",
+        "name": "兴业生活最低0.01",
+        "platform": "transport",
+        "scene": "bus",
+        "channel": "bank-app",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 2,
+        "min": 0.01,
+        "fixed": 1,
+        "dateStart": "2026-10-28",
+        "dateEnd": "2026-12-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "兴业生活->乘车码\n10次/月"
+      },
+      {
+        "id": "id-mvswjyg9-0r9f70",
+        "name": "交通银行最红星期五地铁红包",
+        "platform": "transport",
+        "scene": "subway",
+        "scenes": [
+          "subway"
+        ],
+        "channel": "alipay",
+        "type": "rate",
+        "rate": 100,
+        "cap": 25,
+        "min": 0,
+        "fixed": 0,
+        "dateStart": "2026-10-29",
+        "dateEnd": "2026-11-07",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "总额20.51，用完即止"
+      },
+      {
+        "id": "id-mvub0dqh-ot9ucm",
+        "name": "兴业银行信用卡达标笔笔返18",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 18,
+        "fixed": 0.18,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": null,
+        "notes": "满额抽奖0.18-2026\n30次/月"
+      },
+      {
+        "id": "id-mvub1xhi-8utilz",
+        "name": "兴业银行信用卡达标笔笔返1500",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 1500,
+        "fixed": 1.88,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": null,
+        "notes": "达标抽奖1.88-2026\n3次/月"
+      },
+      {
+        "id": "id-mvudueur-mvuprx",
+        "name": "农业银行信用卡10月天天返现80期",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 18,
+        "fixed": 0.3,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-10-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "领券\n1次/日\n随机"
+      },
+      {
+        "id": "id-mvue1rkq-e69srz",
+        "name": "农业银行信用卡银联手机pay境内消费1%返现",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "rate",
+        "rate": 1,
+        "cap": 10,
+        "min": 0,
+        "fixed": 0,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-11-12",
+        "start": "00:00",
+        "end": "11:59",
+        "limit": null,
+        "notes": "单笔上限10元\n累计返现50元"
+      },
+      {
+        "id": "id-mvuechna-fnz7ij",
+        "name": "农业银行信用卡农情惠娱猫眼满100元返30元",
+        "platform": "other",
+        "scene": "other",
+        "scenes": [
+          "other"
+        ],
+        "channel": "unionpay",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 100,
+        "fixed": 30,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-12-31",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "1次/月"
+      },
+      {
+        "id": "id-mvuh050q-jgqz4l",
+        "name": "广发银行信用卡11.11食惠狂欢",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 500,
+        "fixed": 1.11,
+        "dateStart": "2026-10-30",
+        "dateEnd": "2026-11-15",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "仅限抽奖一次，最高11张茶咖"
+      },
+      {
+        "id": "id-mw0adprn-gx2ily",
+        "name": "兴业生活哈啰单车立减1.5",
+        "platform": "transport",
+        "scene": "shared-bike",
+        "scenes": [
+          "shared-bike"
+        ],
+        "channel": "",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 1.5,
+        "fixed": 1.5,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-12-31",
+        "start": "06:30",
+        "end": "23:59",
+        "limit": 1,
+        "notes": "10次/月"
+      },
+      {
+        "id": "id-mw0afwkc-jgx5pm",
+        "name": "兴业生活滴滴青桔低至1分钱骑行",
+        "platform": "custom-platform-mw0cf9o5",
+        "scene": "shared-bike",
+        "scenes": [
+          "shared-bike"
+        ],
+        "channel": "any",
+        "type": "fixed",
+        "rate": 0,
+        "cap": 0,
+        "min": 1.5,
+        "fixed": 1.49,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-12-31",
+        "start": "06:30",
+        "end": "23:59",
+        "limit": null,
+        "notes": "4次/月"
+      },
+      {
+        "id": "id-mw0d106w-r6k5mz",
+        "name": "农行信用卡11月天天返现81期",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 18,
+        "fixed": 1,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-11-30",
+        "start": "06:30",
+        "end": "23:59",
+        "limit": 1,
+        "notes": ""
+      },
+      {
+        "id": "id-mw0d5omp-xjwyrx",
+        "name": "11.11网购狂欢-农行信用卡限时微信积分惊喜",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "points",
+        "rate": 0,
+        "cap": 0,
+        "min": 1000,
+        "fixed": 3000,
+        "dateStart": "",
+        "dateEnd": "",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": null,
+        "notes": "3倍积分\n50000封顶"
+      },
+      {
+        "id": "id-mw0d9z4o-l06lxw",
+        "name": "农行信用卡微信支付单笔满5000返15刷卡金",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 5000,
+        "fixed": 15,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": null,
+        "notes": "先领券\n券有效期3天"
+      },
+      {
+        "id": "id-mw0hs777-9ouzgw",
+        "name": "邮储银行信用卡（11-12月）",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "cashback",
+        "rate": 0,
+        "cap": 0,
+        "min": 16,
+        "fixed": 2.06,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 10,
+        "notes": "首笔2.06 \n2-10笔0.26"
+      },
+      {
+        "id": "id-mw0hv3t2-eko1y3",
+        "name": "平安银行信用卡天天超级红包（11月）",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "points",
+        "rate": 0,
+        "cap": 0,
+        "min": 0.01,
+        "fixed": 1,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": 1,
+        "notes": ""
+      },
+      {
+        "id": "id-mw0i8m6w-i99jjq",
+        "name": "华夏银行信用卡十分心意（11月）",
+        "platform": "any",
+        "scene": "any",
+        "scenes": [
+          "any"
+        ],
+        "channel": "any",
+        "type": "points",
+        "rate": 0,
+        "cap": 0,
+        "min": 18,
+        "fixed": 1,
+        "dateStart": "2026-11-01",
+        "dateEnd": "2026-11-30",
+        "start": "00:00",
+        "end": "23:59",
+        "limit": null,
+        "notes": "10次/月"
+      },
+      {
+        "id": "id-mw0tlid2-xjei99",
+        "name": "支付宝超级出行卡（1103）6197",
+        "platform": "any",
+        "scene": "subway",
+        "scenes": [
+          "subway"
+        ],
+        "channel": "any",
+        "type": "rate",
+        "rate": 50,
+        "cap": 2,
+        "min": 0,
+        "fixed": 0,
+        "dateStart": "2026-11-04",
+        "dateEnd": "2026-11-13",
+        "start": "06:45",
+        "end": "10:15",
+        "limit": 1,
+        "notes": ""
+      }
+    ],
+    "feedback": [
+      {
+        "id": "id-mw3cvbi2-8j41p2",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "不限 / 未指定",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-05T16:27",
+        "feedbackAt": "2026-11-05T09:41:00.026Z",
+        "note": ""
+      },
+      {
+        "id": "id-mw1yq8u3-lxh2bt",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "不限 / 未指定",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-04T18:16",
+        "feedbackAt": "2026-11-04T10:17:22.491Z",
+        "note": ""
+      },
+      {
+        "id": "id-mw1xzdc6-p197vr",
+        "ruleId": "id-mw0tlid2-xjei99",
+        "ruleName": "支付宝超级出行卡（1103）6197",
+        "scene": "地铁",
+        "platform": "不限 / 未指定",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 2,
+        "actual": 2,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-04T07:56",
+        "feedbackAt": "2026-11-04T09:56:28.614Z",
+        "note": ""
+      },
+      {
+        "id": "id-mw0iexe9-fql913",
+        "ruleId": "id-mvswjyg9-0r9f70",
+        "ruleName": "交通银行最红星期五地铁红包",
+        "scene": "地铁",
+        "platform": "不限 / 未指定",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 5,
+        "actual": 4.99,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-03T17:52",
+        "feedbackAt": "2026-11-03T09:52:54.417Z",
+        "note": ""
+      },
+      {
+        "id": "id-mw03io02-bkikfm",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-03T10:55",
+        "feedbackAt": "2026-11-03T02:55:54.626Z",
+        "note": ""
+      },
+      {
+        "id": "id-mvz4v0pz-2p02bw",
+        "ruleId": "id-mvswjyg9-0r9f70",
+        "ruleName": "交通银行最红星期五地铁红包",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 5,
+        "actual": 4.99,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-02T18:44",
+        "feedbackAt": "2026-11-02T10:45:44.423Z",
+        "note": ""
+      },
+      {
+        "id": "id-mvyhp3at-ykgo9z",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-11-02T07:56",
+        "feedbackAt": "2026-11-01T23:57:16.661Z",
+        "note": ""
+      },
+      {
+        "id": "id-mvutut4g-5ldx7c",
+        "ruleId": "id-mvswjyg9-0r9f70",
+        "ruleName": "交通银行最红星期五地铁红包",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 5,
+        "actual": 4.99,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-10-30T18:26",
+        "feedbackAt": "2026-10-30T10:26:34.096Z",
+        "note": ""
+      },
+      {
+        "id": "id-mvu8kmn4-0sg1zk",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-10-30T08:29",
+        "feedbackAt": "2026-10-30T00:30:47.200Z",
+        "note": ""
+      },
+      {
+        "id": "id-mvtgpe4n-qut9ou",
+        "ruleId": "id-mvswjyg9-0r9f70",
+        "ruleName": "交通银行最红星期五地铁红包",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "支付宝",
+        "amount": 5,
+        "expected": 5,
+        "actual": 4.99,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-10-29T19:30",
+        "feedbackAt": "2026-10-29T11:30:40.199Z",
+        "note": "",
+        "editedAt": "2026-10-29T13:28:35.045Z"
+      },
+      {
+        "id": "id-mvsw8n4o-a2lc5p",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁",
+        "platform": "交通出行",
+        "channel": "不限 / 未指定",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-10-29T09:56",
+        "feedbackAt": "2026-10-29T01:57:46.392Z",
+        "note": "",
+        "editedAt": "2026-10-29T11:42:58.507Z"
+      },
+      {
+        "id": "id-mvs0vvel-gw0raq",
+        "ruleId": "id-mvs06hrk-2fho6u",
+        "ruleName": "交通银行数币乘车码-1.6",
+        "scene": "地铁 / 公共交通",
+        "platform": "交通出行",
+        "amount": 5,
+        "expected": 1.6,
+        "actual": 1.6,
+        "confirmed": true,
+        "result": "confirmed",
+        "when": "2026-10-28T18:55",
+        "feedbackAt": "2026-10-28T11:20:02.494Z",
+        "note": "",
+        "channel": "不限 / 未指定",
+        "editedAt": "2026-10-29T11:43:09.501Z"
+      }
+    ],
+    "lastUpdated": "2026-11-07T13:36:33.442Z",
+    "activities": [
+      {
+        "id": "id-mvteh2jh-199le3",
+        "name": "交通银行信用卡10月消费达标赢返现",
+        "platform": "any",
+        "channel": "wechat",
+        "scene": "any",
+        "start": "2026-10-29",
+        "end": "2026-10-31",
+        "rewardMode": "highest",
+        "tiers": [
+          {
+            "id": "id-mvted6ji-7x8vdz",
+            "target": 5000,
+            "rewardName": "15元",
+            "estimatedReward": 15,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mvtegn4y-6jcqt9",
+            "target": 10000,
+            "rewardName": "30元",
+            "estimatedReward": 30,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": "",
+        "period": "period"
+      },
+      {
+        "id": "id-mvtek0c6-etamu8",
+        "name": "交通银行信用卡最红星期五10月直通场",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-10-29",
+        "end": "2026-10-31",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mvteh2jj-kymvt9",
+            "target": 5000,
+            "rewardName": "1次",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mvtejrql-gefju0",
+            "target": 8000,
+            "rewardName": "1次",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": "",
+        "period": "period"
+      },
+      {
+        "id": "id-mvubh8w9-lflicf",
+        "name": "兴业银行信用卡6积分消费返现（10月）",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-10-30",
+        "end": "2026-10-31",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mvubcpfe-i2hj3s",
+            "target": 1000,
+            "rewardName": "抽奖1-5",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mvubfv5k-cliefk",
+            "target": 3000,
+            "rewardName": "抽奖2-10",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mvubfz4r-n3344c",
+            "target": 6000,
+            "rewardName": "抽奖10-25",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "id-mvz5b86w-5n10r2",
+        "name": "交通银行2026年11月消费达标赢返现活动",
+        "platform": "any",
+        "channel": "wechat",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "highest",
+        "tiers": [
+          {
+            "id": "id-mvz58gze-uzcqvz",
+            "target": 5000,
+            "rewardName": "15元",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 15,
+            "receivedDate": "",
+            "rewardType": "cashback",
+            "points": 0
+          },
+          {
+            "id": "id-mvz5aix1-2i0i1m",
+            "target": 10000,
+            "rewardName": "30元返现",
+            "estimatedReward": 30,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "cashback",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "id-mvz5e1q0-cxlpq5",
+        "name": "交通银行11月最红星期五直通车",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mvz5d3li-9qwley",
+            "target": 5000,
+            "rewardName": "1次",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mvz5dnc8-nxnq8g",
+            "target": 8000,
+            "rewardName": "1次",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "id-mw08hqm1-u560qe",
+        "name": "兴业银行信用卡6积分消费返现（11月）",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mw08fgr9-2g862y",
+            "target": 2000,
+            "rewardName": "1-8元刷卡金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mw08g539-f0bd0g",
+            "target": 3000,
+            "rewardName": "2-10元刷卡金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mw08g5ic-6f2e82",
+            "target": 6000,
+            "rewardName": "10-25元刷卡金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "id-mw0euxew-ywykal",
+        "name": "工商银行信用卡11月月月赢红包",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mw0es5m8-u793fy",
+            "target": 5000,
+            "rewardName": "抽奖",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": "次月20日\n8.8-300"
+      },
+      {
+        "id": "id-mw0fq0cl-3vezsv",
+        "name": "华夏银行信用卡11月月刷月有礼",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mw0fnkie-rc2mk6",
+            "target": 3000,
+            "rewardName": "10元立减金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mw0fo5v6-5tdt6a",
+            "target": 10000,
+            "rewardName": "20元立减金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          },
+          {
+            "id": "id-mw0fo6df-fto2me",
+            "target": 30000,
+            "rewardName": "60元立减金券包",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": "10倍门槛使用"
+      },
+      {
+        "id": "id-mw0gphwj-5y07yh",
+        "name": "建设银行信用卡时光好礼狂欢加马11.11",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-11",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mw0gnnrd-fa366e",
+            "target": 666,
+            "rewardName": "666积分",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "points",
+            "points": 0
+          },
+          {
+            "id": "id-mw0gomn4-quguge",
+            "target": 1666,
+            "rewardName": "666积分",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "points",
+            "points": 0
+          },
+          {
+            "id": "id-mw0gon04-58i1qb",
+            "target": 2026,
+            "rewardName": "666积分",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "points",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      },
+      {
+        "id": "id-mw0ib3xr-qsuk64",
+        "name": "上海银行信用卡冬遇暖甜6次燃动",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "period": "period",
+        "rewardMode": "cumulative",
+        "tiers": [
+          {
+            "id": "id-mw0i9c8c-d4dcm5",
+            "target": 3888,
+            "rewardName": "6券",
+            "estimatedReward": 0,
+            "rewardStatus": "unconfirmed",
+            "actualReward": 0,
+            "receivedDate": "",
+            "rewardType": "other",
+            "points": 0
+          }
+        ],
+        "notes": ""
+      }
+    ],
+    "spendEntries": [
+      {
+        "id": "id-mvw40b4e-sy8p2s",
+        "date": "2026-10-31",
+        "mode": "daily-summary",
+        "amount": 426.58,
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "activityIds": [
+          "ga:id-mvw3z7o3-moa9yu"
+        ],
+        "notes": ""
+      }
+    ],
+    "rewardRecords": [],
+    "rankActivities": [
+      {
+        "id": "id-mvudlf5x-pws4ov",
+        "name": "光大银行信用卡10月刷卡打挑战",
+        "platform": "any",
+        "channel": "any",
+        "scene": "any",
+        "start": "2026-10-30",
+        "end": "2026-10-31",
+        "currentRank": 40631,
+        "finalRank": null,
+        "rewardType": "unknown",
+        "rewardValue": 0,
+        "points": 0,
+        "receivedDate": "",
+        "notes": "次月10号10点开始领取奖励"
+      }
+    ],
+    "rewardActivities": [
+      {
+        "id": "id-mvw3z7o3-moa9yu",
+        "name": "光大银行10月刷卡大挑战",
+        "platform": "any",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-10-01",
+        "end": "2026-10-31",
+        "notes": "",
+        "rules": [
+          {
+            "id": "id-mvw3wwzx-entzl7",
+            "type": "ranking",
+            "name": "排名奖励",
+            "period": "month",
+            "amount": 0,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "none",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": "65000",
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mvw49z2i-v3m3s1",
+        "name": "建设银行龙卡信用卡时光好礼11月",
+        "platform": "any",
+        "scene": "any",
+        "channels": [
+          "alipay",
+          "wechat",
+          "douyin-pay",
+          "jd-pay",
+          "other"
+        ],
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "notes": "",
+        "rules": [
+          {
+            "id": "id-mvw43uje-cab8pf",
+            "type": "daily",
+            "name": "每日规则",
+            "period": "day",
+            "amount": 16,
+            "count": 1,
+            "logic": "all",
+            "rewardType": "points",
+            "reward": 100,
+            "cap": 100,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mvw47mz3-pypoli",
+            "type": "weekly",
+            "name": "每周累计",
+            "period": "week",
+            "amount": 200,
+            "count": 3,
+            "logic": "all",
+            "rewardType": "points",
+            "reward": 1000,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mvw48p5k-fbrn2x",
+            "type": "streak",
+            "name": "连续/周期达标",
+            "period": "week",
+            "amount": 1000,
+            "count": 200,
+            "logic": "all",
+            "rewardType": "points",
+            "reward": 1000,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 4,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mvw4zelu-1cbcsu",
+            "type": "date",
+            "name": "指定日期",
+            "period": "day",
+            "amount": 16,
+            "count": 1,
+            "logic": "all",
+            "rewardType": "points",
+            "reward": 100,
+            "cap": 100,
+            "dateSpec": "周六；每月6日，16日，26日",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mvw9dhuh-28m0g8",
+        "name": "交通银行信用卡岁末狂欢享豪礼",
+        "platform": "any",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-11-01",
+        "end": "2027-01-31",
+        "notes": "50/105000\n200/36000\n500/12000\n1000/6000",
+        "rules": [
+          {
+            "id": "id-mvw9b4yc-y8hf51",
+            "type": "ranking",
+            "name": "排名奖励",
+            "period": "month",
+            "amount": 0,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "none",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": "105000",
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mvw9fm38-6qndup",
+            "type": "single",
+            "name": "单笔消费",
+            "period": "transaction",
+            "amount": 68,
+            "count": 3,
+            "logic": "all",
+            "rewardType": "other",
+            "reward": 0,
+            "cap": 3,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mw0crf8s-k6hbql",
+        "name": "光大银行11月刷卡大挑战",
+        "platform": "custom-platform-mw0cqtgd",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "notes": "基数426.58",
+        "rules": [
+          {
+            "id": "id-mw0cptuf-th5abt",
+            "type": "ranking",
+            "name": "排名奖励",
+            "period": "month",
+            "amount": 0,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "none",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": "65000",
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mw0cstt2-9cey7n",
+        "name": "光大银行12月刷卡大挑战",
+        "platform": "custom-platform-mw0cqtgd",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-12-01",
+        "end": "2026-12-31",
+        "notes": "",
+        "rules": [
+          {
+            "id": "id-mw0crr52-mba9qh",
+            "type": "ranking",
+            "name": "排名奖励",
+            "period": "month",
+            "amount": 0,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "none",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": "65000",
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mw0dm4q8-j1xj7k",
+        "name": "广发信用卡超级刷刷刷",
+        "platform": "any",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-11-02",
+        "end": "2026-12-31",
+        "notes": "18\n88\n188",
+        "rules": [
+          {
+            "id": "id-mw0dgw7p-0pdt4p",
+            "type": "single",
+            "name": "单笔消费",
+            "period": "transaction",
+            "amount": 18,
+            "count": 3,
+            "logic": "all",
+            "rewardType": "other",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mw0diy2p-xo3ktv",
+            "type": "monthly",
+            "name": "每月累计",
+            "period": "month",
+            "amount": 3000,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "cash",
+            "reward": 5,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mw0dkpbc-fuexpn",
+            "type": "monthly",
+            "name": "每月累计",
+            "period": "month",
+            "amount": 10000,
+            "count": 2,
+            "logic": "all",
+            "rewardType": "cash",
+            "reward": 10,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mw0dkt19-59qihl",
+            "type": "monthly",
+            "name": "每月累计",
+            "period": "month",
+            "amount": 20000,
+            "count": 3,
+            "logic": "all",
+            "rewardType": "cash",
+            "reward": 20,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      },
+      {
+        "id": "id-mw0dqyxz-5w59t3",
+        "name": "广发信用卡超级广发日周五五折",
+        "platform": "any",
+        "scene": "any",
+        "channels": [],
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "notes": "",
+        "rules": [
+          {
+            "id": "id-mw0dq9pb-ymu175",
+            "type": "single",
+            "name": "单笔消费",
+            "period": "transaction",
+            "amount": 500,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "other",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          },
+          {
+            "id": "id-mw0dqqbo-c2vspk",
+            "type": "monthly",
+            "name": "每月累计",
+            "period": "month",
+            "amount": 2000,
+            "count": 0,
+            "logic": "all",
+            "rewardType": "other",
+            "reward": 0,
+            "cap": 0,
+            "dateSpec": "",
+            "streak": 0,
+            "rankMetric": "amount",
+            "rankFrom": 1,
+            "rankTo": 1,
+            "actualRank": "",
+            "notes": ""
+          }
+        ]
+      }
+    ],
+    "bankAssetActivities": [
+      {
+        "id": "id-mvyzkfbv-ooz2y0",
+        "bank": "建设银行11月资产提升月月赢",
+        "month": "2026-11",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "baseline": 5000,
+        "scope": "存款 投资理财 数字人民币",
+        "notes": "报名；资产基准为 8-10最高月日均；新增资产；",
+        "tiers": [
+          {
+            "threshold": 10000,
+            "rewardType": "cash",
+            "reward": 10,
+            "label": "10元微信立减金"
+          },
+          {
+            "threshold": 50000,
+            "rewardType": "cash",
+            "reward": 40,
+            "label": "40微信立减金"
+          },
+          {
+            "threshold": 200000,
+            "rewardType": "cash",
+            "reward": 160,
+            "label": "160微信立减金"
+          },
+          {
+            "threshold": 500000,
+            "rewardType": "cash",
+            "reward": 400,
+            "label": "400微信立减金"
+          },
+          {
+            "threshold": 1000000,
+            "rewardType": "cash",
+            "reward": 800,
+            "label": "800微信立减金"
+          },
+          {
+            "threshold": 3000000,
+            "rewardType": "cash",
+            "reward": 2000,
+            "label": "2000微信立减金"
+          },
+          {
+            "threshold": 6000000,
+            "rewardType": "cash",
+            "reward": 4000,
+            "label": "4000微信立减金"
+          }
+        ]
+      },
+      {
+        "id": "id-mw0ebzhl-zero1w",
+        "bank": "工商银行11月升金有礼",
+        "month": "2026-11",
+        "start": "2026-11-01",
+        "end": "2026-11-30",
+        "baseline": 20017.26,
+        "scope": "存款 理财 基金",
+        "notes": "",
+        "tiers": [
+          {
+            "threshold": 10000,
+            "rewardType": "points",
+            "reward": 10000,
+            "label": ""
+          },
+          {
+            "threshold": 50000,
+            "rewardType": "points",
+            "reward": 16000,
+            "label": ""
+          },
+          {
+            "threshold": 100000,
+            "rewardType": "points",
+            "reward": 32000,
+            "label": ""
+          },
+          {
+            "threshold": 500000,
+            "rewardType": "points",
+            "reward": 96000,
+            "label": ""
+          },
+          {
+            "threshold": 1000000,
+            "rewardType": "points",
+            "reward": 160000,
+            "label": ""
+          },
+          {
+            "threshold": 3000000,
+            "rewardType": "points",
+            "reward": 400000,
+            "label": ""
+          },
+          {
+            "threshold": 6000000,
+            "rewardType": "points",
+            "reward": 1000000,
+            "label": ""
+          }
+        ]
+      }
+    ],
+    "bankAssetEntries": [
+      {
+        "id": "id-mvyzljiu-cupowg",
+        "activityId": "id-mvyzkfbv-ooz2y0",
+        "date": "2026-11-02",
+        "amount": 157800,
+        "notes": ""
+      },
+      {
+        "id": "id-mvyznmex-n03iq0",
+        "activityId": "id-mvyzkfbv-ooz2y0",
+        "date": "2026-11-01",
+        "amount": 822.1,
+        "notes": ""
+      },
+      {
+        "id": "id-mw0eczpo-ye2cz8",
+        "activityId": "id-mvyzkfbv-ooz2y0",
+        "date": "2026-11-03",
+        "amount": 246000,
+        "notes": ""
+      },
+      {
+        "id": "id-mw3a9mri-zhmo0x",
+        "activityId": "id-mvyzkfbv-ooz2y0",
+        "date": "2026-11-04",
+        "amount": 255800,
+        "notes": ""
+      },
+      {
+        "id": "id-mw4a86r3-i7gwhg",
+        "activityId": "id-mvyzkfbv-ooz2y0",
+        "date": "2026-11-05",
+        "amount": 235000,
+        "notes": ""
+      }
+    ]
+  },
+  "customPlatforms": [
+    {
+      "value": "custom-platform-mw0cf9o5",
+      "label": "兴业生活"
+    },
+    {
+      "value": "custom-platform-mw0cqtgd",
+      "label": "阳光惠生活"
+    }
+  ],
+  "customScenes": [],
+  "customChannels": [
+    {
+      "value": "custom-channel-mw0cejqo",
+      "label": "兴业生活"
+    }
+  ]
+}
