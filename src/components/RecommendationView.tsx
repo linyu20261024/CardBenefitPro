@@ -77,14 +77,19 @@ interface RecommendationViewProps {
   onOpenSyncModal?: () => void;
 }
 
+function getNowTimeString(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
 export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSyncModal }) => {
   const { state, addFeedbackRecord, loadSampleData } = useCardBenefit();
 
   const [amountInput, setAmountInput] = useState<string>('5');
   const [selectedScene, setSelectedScene] = useState<string>('subway');
-  const [selectedChannel, setSelectedChannel] = useState<string>('alipay');
+  const [selectedChannel, setSelectedChannel] = useState<string>('any');
   const [selectedBank, setSelectedBank] = useState<string>('all');
-  const [customTime, setCustomTime] = useState<string>('08:30');
+  const [customTime, setCustomTime] = useState<string>(getNowTimeString);
   const [recordModalData, setRecordModalData] = useState<{
     result: RecommendationResult;
     actualAmount: number;
@@ -172,13 +177,21 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
           </div>
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 shrink-0">
             <Clock className="w-3.5 h-3.5 text-slate-400 hidden sm:inline" />
-            <span className="hidden sm:inline">消费时刻:</span>
+            <span className="hidden sm:inline">用卡时间:</span>
             <input
               type="time"
               value={customTime}
               onChange={e => setCustomTime(e.target.value)}
               className="px-2 py-1 text-xs font-mono font-medium bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-slate-900 dark:text-white"
             />
+            <button
+              type="button"
+              onClick={() => setCustomTime(getNowTimeString())}
+              className="px-2 py-1 text-2xs font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md transition-colors"
+              title="重置为当前实时时间"
+            >
+              当前
+            </button>
           </div>
         </div>
 
