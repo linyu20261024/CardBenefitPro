@@ -6,7 +6,8 @@
 import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
 import { formatCurrency } from '../utils/engine';
-import { MilestoneActivity, RewardComboActivity, ActivityTier } from '../types/cardBenefit';
+import { inferBankName } from '../data/initialData';
+import { MilestoneActivity, RewardComboActivity, ActivityTier, ComboRule } from '../types/cardBenefit';
 import {
   Sparkles,
   CheckCircle2,
@@ -16,17 +17,27 @@ import {
   Flame,
   Plus,
   Trash2,
+  Edit2,
   Calendar,
   AlertCircle,
   HelpCircle,
   TrendingUp,
   Tag,
   CreditCard,
-  ArrowRight
+  ArrowRight,
+  Sliders
 } from 'lucide-react';
 
 export const ComboActivitiesView: React.FC = () => {
-  const { state, addFeedbackRecord, addActivity, deleteActivity } = useCardBenefit();
+  const {
+    state,
+    addFeedbackRecord,
+    addActivity,
+    updateActivity,
+    deleteActivity,
+    updateRewardActivity,
+    deleteRewardActivity
+  } = useCardBenefit();
 
   // Filter state
   const [activeCategory, setActiveCategory] = useState<'all' | 'milestones' | 'combos' | 'quickpay'>('all');
@@ -39,11 +50,16 @@ export const ComboActivitiesView: React.FC = () => {
     bank: string;
   } | null>(null);
 
+  // Edit Milestone Activity modal
+  const [editingMilestone, setEditingMilestone] = useState<MilestoneActivity | null>(null);
+
+  // Edit Combo Activity modal
+  const [editingCombo, setEditingCombo] = useState<RewardComboActivity | null>(null);
+
   // New activity modal
   const [isNewActivityOpen, setIsNewActivityOpen] = useState(false);
-  const [newActivityType, setNewActivityType] = useState<'quickpay' | 'milestone' | 'custom'>('quickpay');
   const [newActivityName, setNewActivityName] = useState('支付宝快捷支付11月满额达标');
-  const [newActivityBank, setNewActivityBank] = useState('支付宝/多行');
+  const [newActivityBank, setNewActivityBank] = useState('支付宝');
   const [newActivityChannel, setNewActivityChannel] = useState('alipay');
   const [newActivityNotes, setNewActivityNotes] = useState('支付宝快捷支付消费达标赢立减金与抽奖');
   const [newActivityTiers, setNewActivityTiers] = useState<Array<{ target: number; rewardName: string; estimatedReward: number }>>([
@@ -56,16 +72,13 @@ export const ComboActivitiesView: React.FC = () => {
 
   // Compute spend for each activity based on feedback ledger + manual entries
   const getActivitySpend = (activityName: string, bank?: string, channel?: string): number => {
-    // 1. Check if activity has preset currentSpend in user data
     const matchedAct = state.activities.find(a => a.name === activityName);
     let base = matchedAct?.currentSpend || 0;
 
-    // 2. Add confirmed feedback ledger items that contributed to this activity
     const ledgerContribution = state.feedback
       .filter(f => {
         if (f.contributedActivities && f.contributedActivities.includes(activityName)) return true;
         if (f.note && f.note.includes(activityName)) return true;
-        // Or if bank matches and rule implies participation
         if (bank && f.bank === bank && f.ruleName.includes(activityName)) return true;
         return false;
       })
@@ -132,10 +145,12 @@ export const ComboActivitiesView: React.FC = () => {
     e.preventDefault();
     if (!newActivityName.trim()) return;
 
+    const resolvedBank = newActivityBank.trim() || inferBankName(newActivityName);
+
     const newAct: MilestoneActivity = {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: newActivityName.trim(),
-      bank: newActivityBank.trim() || '通用',
+      bank: resolvedBank,
       platform: 'any',
       channel: newActivityChannel,
       scene: 'any',
@@ -163,6 +178,42 @@ export const ComboActivitiesView: React.FC = () => {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const handleSaveMilestoneEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingMilestone) return;
+
+    const sanitizedBank = editingMilestone.bank && editingMilestone.bank !== '合作银行'
+      ? editingMilestone.bank
+      : inferBankName(editingMilestone.name);
+
+    updateActivity({
+      ...editingMilestone,
+      bank: sanitizedBank
+    });
+
+    setToastMsg(`活动「${editingMilestone.name}」规则修改成功！`);
+    setEditingMilestone(null);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleSaveComboEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCombo) return;
+
+    const sanitizedBank = editingCombo.bank && editingCombo.bank !== '合作银行'
+      ? editingCombo.bank
+      : inferBankName(editingCombo.name);
+
+    updateRewardActivity({
+      ...editingCombo,
+      bank: sanitizedBank
+    });
+
+    setToastMsg(`组合连击「${editingCombo.name}」规则修改成功！`);
+    setEditingCombo(null);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
   const handleAddPresetTemplate = (preset: 'alipay' | 'bocom' | 'points') => {
     if (preset === 'alipay') {
       setNewActivityName('支付宝快捷支付11月满额达标狂欢');
@@ -185,7 +236,7 @@ export const ComboActivitiesView: React.FC = () => {
       ]);
     } else {
       setNewActivityName('信用卡多倍积分阶梯达标');
-      setNewActivityBank('通用');
+      setNewActivityBank('通用/多行');
       setNewActivityChannel('any');
       setNewActivityNotes('消费满额赠送海量综合积分');
       setNewActivityTiers([
@@ -213,7 +264,7 @@ export const ComboActivitiesView: React.FC = () => {
             多重组合连击与多维达标活动
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            日/周/连续打卡连击、阶梯满额抽奖与返现，100% 动态展现您导入的实际活动
+            日/周/连续打卡连击、阶梯满额抽奖与返现，支持随时编辑门槛与规则
           </p>
         </div>
 
@@ -307,9 +358,15 @@ export const ComboActivitiesView: React.FC = () => {
         </div>
       ) : (
         <div className="space-y-6">
-          {/* Section 1: Dynamic Milestone Activities from User JSON */}
+          {/* Section 1: Dynamic Milestone Activities */}
           {filteredMilestones.map(activity => {
-            const currentSpend = getActivitySpend(activity.name, activity.bank, activity.channel);
+            // Precise bank resolution: prioritize real bank name, fallback to inferBankName
+            const displayBank =
+              activity.bank && activity.bank !== '合作银行' && activity.bank !== '通用'
+                ? activity.bank
+                : inferBankName(activity.name);
+
+            const currentSpend = getActivitySpend(activity.name, displayBank, activity.channel);
             const highestTier = activity.tiers.reduce((max, t) => (t.target > max ? t.target : max), 1);
             const nextTier = activity.tiers.find(t => t.target > currentSpend);
             const isAlipayQuickpay =
@@ -349,10 +406,10 @@ export const ComboActivitiesView: React.FC = () => {
                           className={`px-2 py-0.5 text-2xs font-bold rounded ${
                             isAlipayQuickpay
                               ? 'bg-sky-400 text-slate-950'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200'
                           }`}
                         >
-                          {activity.bank || '合作银行'}
+                          {displayBank}
                         </span>
                         {isAlipayQuickpay && (
                           <span className="px-2 py-0.5 text-2xs font-bold bg-amber-400 text-slate-950 rounded">
@@ -375,14 +432,14 @@ export const ComboActivitiesView: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                     <button
                       onClick={() =>
                         setQuickSpendModal({
                           targetActivity: activity.name,
                           amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
                           channel: activity.channel === 'any' ? 'alipay' : activity.channel,
-                          bank: activity.bank || '合作银行'
+                          bank: displayBank
                         })
                       }
                       className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs ${
@@ -395,12 +452,19 @@ export const ComboActivitiesView: React.FC = () => {
                       <span>记录消费</span>
                     </button>
                     <button
+                      onClick={() => setEditingMilestone({ ...activity, bank: displayBank })}
+                      className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="修改活动规则与阶梯"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => {
                         if (window.confirm(`确认删除活动「${activity.name}」吗？`)) {
                           deleteActivity(activity.id);
                         }
                       }}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       title="删除活动"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -499,96 +563,126 @@ export const ComboActivitiesView: React.FC = () => {
             );
           })}
 
-          {/* Section 2: Dynamic Reward Combo Activities from User JSON */}
-          {filteredCombos.map(combo => (
-            <div
-              key={combo.id}
-              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xs space-y-5"
-            >
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex items-start sm:items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                    <Coins className="w-5 h-5" />
+          {/* Section 2: Dynamic Reward Combo Activities */}
+          {filteredCombos.map(combo => {
+            const displayBank =
+              combo.bank && combo.bank !== '合作银行' && combo.bank !== '通用'
+                ? combo.bank
+                : inferBankName(combo.name);
+
+            return (
+              <div
+                key={combo.id}
+                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xs space-y-5"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                      <Coins className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                          {combo.name}
+                        </h2>
+                        <span className="px-2 py-0.5 text-2xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
+                          {displayBank}
+                        </span>
+                        <span className="px-2 py-0.5 text-2xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded">
+                          打卡连击
+                        </span>
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        支持日达标、周达标、连续周达标与指定日加码 · {combo.start} ~ {combo.end}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                        {combo.name}
-                      </h2>
-                      <span className="px-2 py-0.5 text-2xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
-                        多重打卡连击
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      支持日达标、周达标、连续周达标与指定日加码 · {combo.start} ~ {combo.end}
-                    </div>
+
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                    <button
+                      onClick={() =>
+                        setQuickSpendModal({
+                          targetActivity: combo.name,
+                          amount: 16,
+                          channel: combo.channels?.[0] || 'alipay',
+                          bank: displayBank
+                        })
+                      }
+                      className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+                    >
+                      <Coins className="w-3.5 h-3.5" />
+                      <span>打卡记账</span>
+                    </button>
+                    <button
+                      onClick={() => setEditingCombo({ ...combo, bank: displayBank })}
+                      className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="修改组合连击规则"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`确认删除组合活动「${combo.name}」吗？`)) {
+                          deleteRewardActivity(combo.id);
+                        }
+                      }}
+                      className="p-2 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="删除组合活动"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                <button
-                  onClick={() =>
-                    setQuickSpendModal({
-                      targetActivity: combo.name,
-                      amount: 16,
-                      channel: combo.channels?.[0] || 'alipay',
-                      bank: combo.bank || '建设银行'
-                    })
-                  }
-                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
-                >
-                  <Coins className="w-3.5 h-3.5" />
-                  <span>打卡记账</span>
-                </button>
+                {/* Combo Rules Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {combo.rules.map((rule, idx) => {
+                    return (
+                      <div
+                        key={rule.id || idx}
+                        className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                            {rule.name || `规则 0${idx + 1}`}
+                          </span>
+                          <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                            {rule.type === 'daily'
+                              ? '日达标'
+                              : rule.type === 'weekly'
+                              ? '周达标'
+                              : rule.type === 'streak'
+                              ? '连击达标'
+                              : rule.type === 'ranking'
+                              ? '排名挑战'
+                              : '特定日'}
+                          </span>
+                        </div>
+
+                        <div className="text-sm font-bold text-slate-900 dark:text-white">
+                          {rule.amount > 0 ? `消费满 ${rule.amount} 元` : '按排位奖励'}
+                        </div>
+
+                        <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                          {rule.notes ||
+                            (rule.dateSpec
+                              ? `指定日期: ${rule.dateSpec}`
+                              : rule.streak
+                              ? `需连续 ${rule.streak} 个周期达标`
+                              : '按交易频次与金额达标发放')}
+                        </p>
+
+                        <div className="pt-2 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                          奖励: +{rule.reward} {rule.rewardType === 'points' ? '积分' : '元'}
+                          {rule.cap > 0 && ` (封顶${rule.cap})`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-
-              {/* Combo Rules Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {combo.rules.map((rule, idx) => {
-                  return (
-                    <div
-                      key={rule.id || idx}
-                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
-                          {rule.name || `规则 0${idx + 1}`}
-                        </span>
-                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                          {rule.type === 'daily'
-                            ? '日达标'
-                            : rule.type === 'weekly'
-                            ? '周达标'
-                            : rule.type === 'streak'
-                            ? '连击达标'
-                            : rule.type === 'ranking'
-                            ? '排名挑战'
-                            : '特定日'}
-                        </span>
-                      </div>
-
-                      <div className="text-sm font-bold text-slate-900 dark:text-white">
-                        {rule.amount > 0 ? `消费满 ${rule.amount} 元` : '按排位奖励'}
-                      </div>
-
-                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                        {rule.notes ||
-                          (rule.dateSpec
-                            ? `指定日期: ${rule.dateSpec}`
-                            : rule.streak
-                            ? `需连续 ${rule.streak} 个周期达标`
-                            : '按交易频次与金额达标发放')}
-                      </p>
-
-                      <div className="pt-2 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
-                        奖励: +{rule.reward} {rule.rewardType === 'points' ? '积分' : '元'}
-                        {rule.cap > 0 && ` (封顶${rule.cap})`}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -665,6 +759,328 @@ export const ComboActivitiesView: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Edit Milestone Activity Modal */}
+      {editingMilestone && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <form
+            onSubmit={handleSaveMilestoneEdit}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">修改阶梯达标活动规则</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingMilestone(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动名称</label>
+                <input
+                  type="text"
+                  required
+                  value={editingMilestone.name}
+                  onChange={e => setEditingMilestone({ ...editingMilestone, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
+                  <input
+                    type="text"
+                    value={editingMilestone.bank || ''}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, bank: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定渠道</label>
+                  <select
+                    value={editingMilestone.channel}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, channel: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="any">不限渠道</option>
+                    <option value="alipay">支付宝快捷支付</option>
+                    <option value="wechat">微信支付</option>
+                    <option value="unionpay">银联云闪付</option>
+                    <option value="bank_app">银行App</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">开始日期</label>
+                  <input
+                    type="date"
+                    value={editingMilestone.start}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, start: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">结束日期</label>
+                  <input
+                    type="date"
+                    value={editingMilestone.end}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, end: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
+                <input
+                  type="text"
+                  value={editingMilestone.notes || ''}
+                  onChange={e => setEditingMilestone({ ...editingMilestone, notes: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Tiers list editor */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium">阶梯档位设置</label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentTiers = editingMilestone.tiers || [];
+                      const lastTarget = currentTiers.length > 0 ? currentTiers[currentTiers.length - 1].target + 3000 : 5000;
+                      setEditingMilestone({
+                        ...editingMilestone,
+                        tiers: [
+                          ...currentTiers,
+                          {
+                            id: `tier-${Date.now()}`,
+                            target: lastTarget,
+                            rewardName: '新档位奖励',
+                            estimatedReward: 15,
+                            rewardStatus: 'unconfirmed',
+                            actualReward: 0,
+                            receivedDate: '',
+                            rewardType: 'other',
+                            points: 0
+                          }
+                        ]
+                      });
+                    }}
+                    className="text-2xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    + 增加阶梯档位
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {editingMilestone.tiers.map((tier, idx) => (
+                    <div key={tier.id || idx} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
+                      <span className="text-2xs font-mono text-slate-400 w-8">#{idx + 1}</span>
+                      <div className="w-24">
+                        <input
+                          type="number"
+                          value={tier.target}
+                          onChange={e => {
+                            const updated = [...editingMilestone.tiers];
+                            updated[idx] = { ...updated[idx], target: parseFloat(e.target.value) || 0 };
+                            setEditingMilestone({ ...editingMilestone, tiers: updated });
+                          }}
+                          placeholder="满额(元)"
+                          className="w-full px-2 py-1 font-mono text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={tier.rewardName}
+                          onChange={e => {
+                            const updated = [...editingMilestone.tiers];
+                            updated[idx] = { ...updated[idx], rewardName: e.target.value };
+                            setEditingMilestone({ ...editingMilestone, tiers: updated });
+                          }}
+                          placeholder="奖励名称 (如 15元 / 抽奖1次)"
+                          className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded"
+                        />
+                      </div>
+                      <div className="w-20">
+                        <input
+                          type="number"
+                          value={tier.estimatedReward}
+                          onChange={e => {
+                            const updated = [...editingMilestone.tiers];
+                            updated[idx] = { ...updated[idx], estimatedReward: parseFloat(e.target.value) || 0 };
+                            setEditingMilestone({ ...editingMilestone, tiers: updated });
+                          }}
+                          placeholder="价值(元)"
+                          className="w-full px-2 py-1 font-mono text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded"
+                        />
+                      </div>
+                      {editingMilestone.tiers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = editingMilestone.tiers.filter((_, i) => i !== idx);
+                            setEditingMilestone({ ...editingMilestone, tiers: updated });
+                          }}
+                          className="text-slate-400 hover:text-rose-500 p-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingMilestone(null)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
+              >
+                保存规则修改
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Combo Activity Modal */}
+      {editingCombo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <form
+            onSubmit={handleSaveComboEdit}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">修改组合连击活动规则</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingCombo(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动名称</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCombo.name}
+                  onChange={e => setEditingCombo({ ...editingCombo, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
+                <input
+                  type="text"
+                  value={editingCombo.bank || ''}
+                  onChange={e => setEditingCombo({ ...editingCombo, bank: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Combo rules editor */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">各阶段打卡规则明细</label>
+                <div className="space-y-3">
+                  {editingCombo.rules.map((rule, idx) => (
+                    <div key={rule.id || idx} className="p-3 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-slate-900 dark:text-white">阶段 {idx + 1}: {rule.name}</span>
+                        <span className="text-2xs text-slate-400 font-mono">{rule.type}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-3xs text-slate-400">门槛金额 (元)</label>
+                          <input
+                            type="number"
+                            value={rule.amount}
+                            onChange={e => {
+                              const updated = [...editingCombo.rules];
+                              updated[idx] = { ...updated[idx], amount: parseFloat(e.target.value) || 0 };
+                              setEditingCombo({ ...editingCombo, rules: updated });
+                            }}
+                            className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-3xs text-slate-400">奖励数值 (积分/现金)</label>
+                          <input
+                            type="number"
+                            value={rule.reward}
+                            onChange={e => {
+                              const updated = [...editingCombo.rules];
+                              updated[idx] = { ...updated[idx], reward: parseFloat(e.target.value) || 0 };
+                              setEditingCombo({ ...editingCombo, rules: updated });
+                            }}
+                            className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-3xs text-slate-400">规则说明</label>
+                        <input
+                          type="text"
+                          value={rule.notes || ''}
+                          onChange={e => {
+                            const updated = [...editingCombo.rules];
+                            updated[idx] = { ...updated[idx], notes: e.target.value };
+                            setEditingCombo({ ...editingCombo, rules: updated });
+                          }}
+                          className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingCombo(null)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 rounded-lg"
+              >
+                保存组合规则
+              </button>
+            </div>
+          </form>
         </div>
       )}
 

@@ -32,6 +32,12 @@ interface CardBenefitContextType {
   addActivity: (activity: MilestoneActivity) => void;
   updateActivity: (activity: MilestoneActivity) => void;
   deleteActivity: (id: string) => void;
+  addRewardActivity: (activity: RewardComboActivity) => void;
+  updateRewardActivity: (activity: RewardComboActivity) => void;
+  deleteRewardActivity: (id: string) => void;
+  addBankAssetActivity: (activity: BankAssetActivity) => void;
+  updateBankAssetActivity: (activity: BankAssetActivity) => void;
+  deleteBankAssetActivity: (id: string) => void;
   importJsonData: (jsonString: string) => { success: boolean; message: string };
   exportJsonData: () => string;
   resetToDefaultData: () => void;
@@ -57,6 +63,18 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
             parsed.rules = parsed.rules.map((r: any) => ({
               ...r,
               bank: r.bank || inferBankName(r.name || '')
+            }));
+          }
+          if (parsed.activities && parsed.activities.length > 0) {
+            parsed.activities = parsed.activities.map((a: any) => ({
+              ...a,
+              bank: a.bank || inferBankName(a.name || '')
+            }));
+          }
+          if (parsed.rewardActivities && parsed.rewardActivities.length > 0) {
+            parsed.rewardActivities = parsed.rewardActivities.map((ra: any) => ({
+              ...ra,
+              bank: ra.bank || inferBankName(ra.name || '')
             }));
           }
           return parsed;
@@ -224,6 +242,54 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }));
   };
 
+  const addRewardActivity = (activity: RewardComboActivity) => {
+    setState(prev => ({
+      ...prev,
+      rewardActivities: [activity, ...prev.rewardActivities],
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const updateRewardActivity = (activity: RewardComboActivity) => {
+    setState(prev => ({
+      ...prev,
+      rewardActivities: prev.rewardActivities.map(a => (a.id === activity.id ? activity : a)),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const deleteRewardActivity = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      rewardActivities: prev.rewardActivities.filter(a => a.id !== id),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const addBankAssetActivity = (activity: BankAssetActivity) => {
+    setState(prev => ({
+      ...prev,
+      bankAssetActivities: [activity, ...prev.bankAssetActivities],
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const updateBankAssetActivity = (activity: BankAssetActivity) => {
+    setState(prev => ({
+      ...prev,
+      bankAssetActivities: prev.bankAssetActivities.map(a => (a.id === activity.id ? activity : a)),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const deleteBankAssetActivity = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      bankAssetActivities: prev.bankAssetActivities.filter(a => a.id !== id),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
   const importJsonData = (jsonString: string): { success: boolean; message: string } => {
     try {
       const data = JSON.parse(jsonString);
@@ -235,18 +301,28 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return { success: false, message: '无效的卡片优惠JSON数据，未检测到 rules 或 activities 字段' };
       }
 
-      // Merge and sanitize
+      // Merge and sanitize with bank inference
       const mergedRules = (targetState.rules || []).map((r: any) => ({
         ...r,
         bank: r.bank || inferBankName(r.name || ''),
         enabled: r.enabled !== false
       }));
 
+      const mergedActivities = (targetState.activities || []).map((a: any) => ({
+        ...a,
+        bank: a.bank || inferBankName(a.name || '')
+      }));
+
+      const mergedRewardActivities = (targetState.rewardActivities || []).map((ra: any) => ({
+        ...ra,
+        bank: ra.bank || inferBankName(ra.name || '')
+      }));
+
       setState(prev => ({
         ...prev,
         rules: mergedRules.length > 0 ? mergedRules : prev.rules,
-        activities: targetState.activities || prev.activities,
-        rewardActivities: targetState.rewardActivities || prev.rewardActivities,
+        activities: mergedActivities.length > 0 ? mergedActivities : prev.activities,
+        rewardActivities: mergedRewardActivities.length > 0 ? mergedRewardActivities : prev.rewardActivities,
         bankAssetActivities: targetState.bankAssetActivities || prev.bankAssetActivities,
         bankAssetEntries: targetState.bankAssetEntries || prev.bankAssetEntries,
         feedback: targetState.feedback || prev.feedback,
@@ -334,6 +410,12 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         addActivity,
         updateActivity,
         deleteActivity,
+        addRewardActivity,
+        updateRewardActivity,
+        deleteRewardActivity,
+        addBankAssetActivity,
+        updateBankAssetActivity,
+        deleteBankAssetActivity,
         importJsonData,
         exportJsonData,
         resetToDefaultData,
