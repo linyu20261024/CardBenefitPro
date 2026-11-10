@@ -204,8 +204,10 @@ export interface RecommendationResult {
   triggersCombo: boolean;        // 触发多重组合达标
   triggeredComboDetails: string[];
   qualifications: string[];      // 资格与注意事项 (如 限时段, 领券, 次数限制)
-  notes: string;
+  notes?: string;                // 规则或活动补充说明
   ruleRef: InstantRule | MilestoneActivity | RewardComboActivity;
+  isEligible: boolean;           // 是否符合当前生效条件 (时间、门槛、限额等)
+  ineligibleReason?: string;     // 不符合的原因 (如: 不在生效时段内：限 06:45-10:15)
 }
 
 export interface AppState {

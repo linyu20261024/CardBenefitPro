@@ -115,8 +115,20 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
     );
   }, [parsedAmount, selectedScene, selectedChannel, selectedBank, customTime, state]);
 
-  const bestPick = recommendations.length > 0 ? recommendations[0] : null;
-  const otherPicks = recommendations.length > 1 ? recommendations.slice(1) : [];
+  const eligibleRecommendations = useMemo(() => {
+    return recommendations.filter(r => r.isEligible);
+  }, [recommendations]);
+
+  const ineligibleRecommendations = useMemo(() => {
+    return recommendations.filter(r => !r.isEligible);
+  }, [recommendations]);
+
+  const bestPick = eligibleRecommendations.length > 0 && eligibleRecommendations[0].totalEffectiveBenefit > 0
+    ? eligibleRecommendations[0]
+    : null;
+  const otherPicks = bestPick
+    ? eligibleRecommendations.slice(1)
+    : eligibleRecommendations;
 
   const handleApplyRecommendation = (rec: RecommendationResult) => {
     setRecordModalData({
@@ -448,14 +460,35 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
             </div>
           )}
 
-          {/* Secondary Candidate List */}
+          {/* When no card is currently eligible with savings */}
+          {!bestPick && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 sm:p-7 text-center space-y-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center mx-auto text-amber-600 dark:text-amber-400">
+                <Clock className="w-5 h-5" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
+                  当前用卡时段与金额下暂无可直接生效的立减/返现方案
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-lg mx-auto leading-relaxed">
+                  当前设定用卡时间为 <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">{customTime}</span>，拟消费 <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">¥{parsedAmount}</span>。
+                  {ineligibleRecommendations.length > 0
+                    ? ` 下方已为您列出 ${ineligibleRecommendations.length} 项存在专属优惠但当前未满足条件（如不在生效时段内或未达起用门槛）的卡片方案及明确原因。`
+                    : ' 您可以尝试切换支付渠道或消费场景查看更多优惠。'}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Secondary Candidate List for currently eligible cards */}
           {otherPicks.length > 0 && (
             <div className="space-y-2.5 pt-1 sm:pt-2">
               <div className="flex items-center justify-between text-xs">
-                <h3 className="font-semibold text-slate-800 dark:text-slate-200">
-                  其他备选推荐方案 ({otherPicks.length})
+                <h3 className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{bestPick ? `其他备选推荐方案 (${otherPicks.length})` : `其他当前可用方案 (${otherPicks.length})`}</span>
                 </h3>
-                <span className="text-2xs text-slate-400">按综合有效收益排序</span>
+                <span className="text-2xs text-slate-400">满足当前时段与消费门槛</span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5">
@@ -514,6 +547,112 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Ineligible Recommendations Section: Clear reasons for why not meeting conditions */}
+          {ineligibleRecommendations.length > 0 && (
+            <div className="space-y-3 pt-4 border-t border-dashed border-slate-200 dark:border-slate-800">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                <div className="flex items-center gap-2">
+                  <div className="px-2 py-0.5 text-2xs font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 rounded flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    <span>暂不满足条件 ({ineligibleRecommendations.length})</span>
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200">
+                    存在专属优惠但当前未生效的方案
+                  </h3>
+                </div>
+                <span className="text-2xs text-slate-400">
+                  明确标注不符合原因 · 满足后可享优惠
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                {ineligibleRecommendations.map(rec => {
+                  const rule = 'start' in rec.ruleRef ? (rec.ruleRef as any) : null;
+                  const isOutOfTime = rec.ineligibleReason?.includes('时段');
+                  const isUnderMin = rec.ineligibleReason?.includes('门槛');
+
+                  return (
+                    <div
+                      key={rec.id}
+                      className="bg-white/90 dark:bg-slate-900/90 border border-amber-200/90 dark:border-amber-900/50 rounded-xl p-3.5 sm:p-4 shadow-2xs flex flex-col justify-between space-y-3 relative overflow-hidden"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400">
+                            {rec.bank} · {rec.channel}
+                          </span>
+                          <span className="text-3xs px-1.5 py-0.5 rounded font-mono font-medium bg-amber-100/60 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+                            当前未生效
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
+                          {rec.name}
+                        </h4>
+
+                        {/* Explicit Reason Box */}
+                        <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/50 border border-amber-200/60 dark:border-amber-900/40 text-2xs font-medium text-amber-800 dark:text-amber-300 flex items-start gap-1.5 leading-relaxed">
+                          <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                          <span>{rec.ineligibleReason || '当前未满足优惠生效条件'}</span>
+                        </div>
+
+                        {/* Quick test actions */}
+                        {isOutOfTime && rule?.start && rule.start !== '00:00' && (
+                          <button
+                            type="button"
+                            onClick={() => setCustomTime(rule.start)}
+                            className="w-full text-2xs py-1 px-2 rounded-md bg-amber-100/70 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 transition-colors flex items-center justify-center gap-1 font-medium active:scale-98"
+                          >
+                            <Clock className="w-3 h-3" />
+                            <span>快速切至生效时段 ({rule.start}) 试算</span>
+                          </button>
+                        )}
+
+                        {isUnderMin && rule?.min && parsedAmount < rule.min && (
+                          <button
+                            type="button"
+                            onClick={() => setAmountInput(String(rule.min))}
+                            className="w-full text-2xs py-1 px-2 rounded-md bg-amber-100/70 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-900 dark:text-amber-200 transition-colors flex items-center justify-center gap-1 font-medium active:scale-98"
+                          >
+                            <Coins className="w-3 h-3" />
+                            <span>设为起用门槛 (¥{rule.min}) 试算</span>
+                          </button>
+                        )}
+
+                        <p className="text-3xs sm:text-2xs text-slate-400 dark:text-slate-500 line-clamp-2">
+                          {rec.notes || '符合场景或渠道定向优惠，满足指定条件后享受。'}
+                        </p>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                        <div>
+                          <div className="text-3xs text-slate-400">达标后可享</div>
+                          <div className="text-xs sm:text-sm font-mono font-bold text-amber-600 dark:text-amber-400 tabular-nums">
+                            +{formatCurrency(rec.totalEffectiveBenefit)}
+                            {rec.instantSavings > 0 && (
+                              <span className="text-3xs text-slate-400 ml-1 font-normal">
+                                (立减¥{rec.instantSavings})
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleApplyRecommendation(rec)}
+                          className="px-2.5 py-1 text-2xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors whitespace-nowrap active:scale-95"
+                        >
+                          仍要记录
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

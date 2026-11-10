@@ -46,23 +46,6 @@ export function evaluateRecommendations(
     // Bank filter
     if (bank && bank !== 'all' && rule.bank !== bank) continue;
 
-    // Amount min check
-    if (rule.min && amount < rule.min) continue;
-
-    // Date range check
-    if (rule.dateStart && currentDate < rule.dateStart) continue;
-    if (rule.dateEnd && currentDate > rule.dateEnd) continue;
-
-    // Time window check (e.g. 06:30 - 10:00)
-    let isTimeRestricted = false;
-    let inTimeWindow = true;
-    if (rule.start && rule.end && rule.start !== '00:00' && rule.end !== '23:59') {
-      isTimeRestricted = true;
-      if (currentTime < rule.start || currentTime > rule.end) {
-        inTimeWindow = false;
-      }
-    }
-
     // Scene match
     const sceneMatch =
       rule.scene === 'any' ||
@@ -80,9 +63,50 @@ export function evaluateRecommendations(
       (rule.channel === 'transit_code' && (channel === 'alipay' || channel === 'unionpay'));
     if (!channelMatch) continue;
 
+    // Evaluate eligibility
+    let isEligible = true;
+    const ineligibleReasons: string[] = [];
+
+    // Time window check (e.g. 06:30 - 10:00)
+    let isTimeRestricted = false;
+    let inTimeWindow = true;
+    if (rule.start && rule.end && rule.start !== '00:00' && rule.end !== '23:59') {
+      isTimeRestricted = true;
+      if (currentTime < rule.start || currentTime > rule.end) {
+        inTimeWindow = false;
+        isEligible = false;
+        ineligibleReasons.push(`不在生效时段内 (限 ${rule.start}-${rule.end}，当前用卡时间 ${currentTime})`);
+      }
+    }
+
+    // Amount min check
+    let meetsMin = true;
+    if (rule.min && amount < rule.min) {
+      meetsMin = false;
+      isEligible = false;
+      const diff = (rule.min - amount).toFixed(2);
+      ineligibleReasons.push(`未达门槛金额 (需满 ¥${rule.min}，还差 ¥${diff})`);
+    }
+
+    // Date range check
+    let inDateRange = true;
+    if (rule.dateStart && currentDate < rule.dateStart) {
+      inDateRange = false;
+      isEligible = false;
+      ineligibleReasons.push(`活动尚未开始 (自 ${rule.dateStart} 起)`);
+    } else if (rule.dateEnd && currentDate > rule.dateEnd) {
+      inDateRange = false;
+      isEligible = false;
+      ineligibleReasons.push(`活动已结束 (截止于 ${rule.dateEnd})`);
+    }
+
     // Usage limit check
-    if (rule.limit && rule.usedCount && rule.usedCount >= rule.limit) {
-      continue; // Expended
+    let underLimit = true;
+    const periodLabel = rule.limitPeriod === 'day' ? '日' : rule.limitPeriod === 'week' ? '周' : rule.limitPeriod === 'total' ? '活动期' : '月';
+    if (rule.limit && (rule.usedCount || 0) >= rule.limit) {
+      underLimit = false;
+      isEligible = false;
+      ineligibleReasons.push(`本${periodLabel}优惠次数已达上限 (${rule.usedCount || 0}/${rule.limit}次)`);
     }
 
     // Calculate benefits
@@ -97,9 +121,12 @@ export function evaluateRecommendations(
     if (isTimeRestricted) {
       qualifications.push(`限时段 ${rule.start}-${rule.end}${inTimeWindow ? ' (当前生效中)' : ' (当前未在时间段)'}`);
     }
+    if (rule.min) {
+      qualifications.push(`满¥${rule.min}起用${meetsMin ? '' : ' (未达标)'}`);
+    }
     if (rule.limit) {
-      const remaining = rule.limit - (rule.usedCount || 0);
-      qualifications.push(`限额 ${rule.limit}次/${rule.limitPeriod === 'day' ? '日' : '月'} (余${remaining}次)`);
+      const remaining = Math.max(0, rule.limit - (rule.usedCount || 0));
+      qualifications.push(`限额 ${rule.limit}次/${periodLabel} (余${remaining}次)`);
     }
 
     switch (rule.type) {
@@ -190,7 +217,9 @@ export function evaluateRecommendations(
       triggeredComboDetails: triggeredMilestones,
       qualifications,
       notes: rule.notes || '',
-      ruleRef: rule
+      ruleRef: rule,
+      isEligible,
+      ineligibleReason: isEligible ? undefined : ineligibleReasons.join('；')
     });
   }
 
@@ -230,37 +259,40 @@ export function evaluateRecommendations(
           triggeredComboDetails: [`本笔消费直接促成【${act.name}】达标门槛 ¥${tier.target}！`],
           qualifications: [`当前累计¥${currentSpend} -> 消费后¥${projectedSpend}`],
           notes: act.notes || '消费门槛阶梯奖励',
-          ruleRef: act
+          ruleRef: act,
+          isEligible: true
         });
       }
     }
   }
 
-  // Sort results by total effective benefit descending
+  // Sort results: Eligible cards strictly first, sorted by benefit descending; Ineligible cards below, sorted by potential benefit
   results.sort((a, b) => {
+    if (a.isEligible !== b.isEligible) {
+      return a.isEligible ? -1 : 1;
+    }
     if (b.totalEffectiveBenefit !== a.totalEffectiveBenefit) {
       return b.totalEffectiveBenefit - a.totalEffectiveBenefit;
     }
     return b.instantSavings - a.instantSavings;
   });
 
-  if (results.length > 0) {
-    // Flag the best overall
-    results[0].isBestOverall = true;
+  // Flag the best overall: ONLY among ELIGIBLE cards with totalEffectiveBenefit > 0
+  const bestEligible = results.find(r => r.isEligible && r.totalEffectiveBenefit > 0);
+  if (bestEligible) {
+    bestEligible.isBestOverall = true;
+  }
 
-    // Find highest instant discount
-    let maxInstant = -1;
-    let maxInstantIndex = -1;
-    results.forEach((r, idx) => {
-      if (r.instantSavings > maxInstant && r.instantSavings > 0) {
-        maxInstant = r.instantSavings;
-        maxInstantIndex = idx;
+  // Find highest instant discount ONLY among ELIGIBLE cards with instantSavings > 0
+  const eligibleInstants = results.filter(r => r.isEligible && r.instantSavings > 0);
+  if (eligibleInstants.length > 0) {
+    let topInstant = eligibleInstants[0];
+    for (const r of eligibleInstants) {
+      if (r.instantSavings > topInstant.instantSavings) {
+        topInstant = r;
       }
-    });
-
-    if (maxInstantIndex >= 0) {
-      results[maxInstantIndex].isBestInstant = true;
     }
+    topInstant.isBestInstant = true;
   }
 
   return results;

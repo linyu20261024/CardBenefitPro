@@ -17,7 +17,9 @@ import {
   Filter,
   ToggleLeft,
   ToggleRight,
-  Edit2
+  Edit2,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 
 export const LedgerFeedbackView: React.FC = () => {
@@ -27,6 +29,7 @@ export const LedgerFeedbackView: React.FC = () => {
     deleteFeedbackRecord,
     toggleRule,
     addRule,
+    updateRule,
     deleteRule,
     totalSaved
   } = useCardBenefit();
@@ -34,6 +37,7 @@ export const LedgerFeedbackView: React.FC = () => {
   const [activeSubTab, setActiveSubTab] = useState<'feedback' | 'rules'>('feedback');
   const [searchQuery, setSearchQuery] = useState('');
   const [bankFilter, setBankFilter] = useState('all');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   // New feedback modal
   const [isAddFeedbackOpen, setIsAddFeedbackOpen] = useState(false);
@@ -48,6 +52,10 @@ export const LedgerFeedbackView: React.FC = () => {
     actual: 2,
     note: ''
   });
+
+  // Edit rule modal
+  const [editingRule, setEditingRule] = useState<InstantRule | null>(null);
+  const [editRuleData, setEditRuleData] = useState<InstantRule | null>(null);
 
   // New rule modal
   const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
@@ -66,8 +74,9 @@ export const LedgerFeedbackView: React.FC = () => {
     dateEnd: '2026-12-31',
     start: '00:00',
     end: '23:59',
-    limit: 10,
+    limit: 1,
     limitPeriod: 'month',
+    usedCount: 0,
     notes: ''
   });
 
@@ -129,6 +138,8 @@ export const LedgerFeedbackView: React.FC = () => {
       enabled: true
     });
     setIsAddRuleOpen(false);
+    setToastMsg(`新规则「${newRuleData.name}」已添加成功！`);
+    setTimeout(() => setToastMsg(null), 3000);
     setNewRuleData({
       name: '',
       bank: '交通银行',
@@ -144,10 +155,38 @@ export const LedgerFeedbackView: React.FC = () => {
       dateEnd: '2026-12-31',
       start: '00:00',
       end: '23:59',
-      limit: 10,
+      limit: 1,
       limitPeriod: 'month',
+      usedCount: 0,
       notes: ''
     });
+  };
+
+  const handleOpenEditRule = (rule: InstantRule) => {
+    setEditingRule(rule);
+    setEditRuleData({
+      ...rule,
+      usedCount: rule.usedCount ?? 0,
+      limitPeriod: rule.limitPeriod || 'month'
+    });
+  };
+
+  const handleUpdateRuleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editRuleData) return;
+    updateRule({
+      ...editRuleData,
+      rate: Number(editRuleData.rate) || 0,
+      cap: Number(editRuleData.cap) || 0,
+      min: Number(editRuleData.min) || 0,
+      fixed: Number(editRuleData.fixed) || 0,
+      limit: editRuleData.limit ? Number(editRuleData.limit) : null,
+      usedCount: Number(editRuleData.usedCount) || 0
+    });
+    setToastMsg(`规则「${editRuleData.name}」已成功保存！`);
+    setTimeout(() => setToastMsg(null), 3000);
+    setEditingRule(null);
+    setEditRuleData(null);
   };
 
   return (
@@ -374,23 +413,49 @@ export const LedgerFeedbackView: React.FC = () => {
                           : `${rule.type}`}
                       </td>
                       <td className="py-3 px-4 font-mono text-2xs text-slate-500">
-                        <div>
-                          {rule.start && rule.end && rule.start !== '00:00'
+                        <div className="font-semibold text-slate-700 dark:text-slate-300">
+                          {rule.start && rule.end && rule.start !== '00:00' && rule.end !== '23:59'
                             ? `${rule.start}-${rule.end}`
-                            : '全天'}
+                            : '全天生效'}
                         </div>
-                        <div>
-                          {rule.limit ? `${rule.limit}次/${rule.limitPeriod === 'day' ? '日' : '月'}` : '不限次'}
+                        <div className="mt-0.5">
+                          {rule.limit ? (
+                            <span className="inline-flex items-center gap-1">
+                              <span className="font-semibold text-amber-600 dark:text-amber-400">
+                                {rule.limit}次/{rule.limitPeriod === 'day' ? '日' : rule.limitPeriod === 'week' ? '周' : rule.limitPeriod === 'total' ? '活动期' : '月'}
+                              </span>
+                              <span className="text-3xs text-slate-400">
+                                (已用 {rule.usedCount || 0}次)
+                              </span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400">不限频次</span>
+                          )}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => deleteRule(rule.id)}
-                          className="text-slate-400 hover:text-rose-500 p-1"
-                          title="删除规则"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => handleOpenEditRule(rule)}
+                            className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="修改规则详情与限额"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`确定要删除规则「${rule.name}」吗？`)) {
+                                deleteRule(rule.id);
+                                setToastMsg(`规则「${rule.name}」已删除`);
+                                setTimeout(() => setToastMsg(null), 3000);
+                              }
+                            }}
+                            className="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="删除规则"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -511,27 +576,384 @@ export const LedgerFeedbackView: React.FC = () => {
         </div>
       )}
 
+      {/* Edit Rule Modal */}
+      {editingRule && editRuleData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <form
+            onSubmit={handleUpdateRuleSubmit}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">修改用卡规则与限额</h3>
+                  <p className="text-3xs text-slate-400">调整卡片规则、生效时段及使用频次限制</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingRule(null);
+                  setEditRuleData(null);
+                }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-semibold p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              {/* Rule Name */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">规则名称</label>
+                <input
+                  type="text"
+                  required
+                  value={editRuleData.name}
+                  onChange={e => setEditRuleData({ ...editRuleData, name: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-medium"
+                />
+              </div>
+
+              {/* Bank, Scene, Channel */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构 / 银行</label>
+                  <input
+                    type="text"
+                    value={editRuleData.bank || ''}
+                    onChange={e => setEditRuleData({ ...editRuleData, bank: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费场景</label>
+                  <select
+                    value={editRuleData.scene}
+                    onChange={e => setEditRuleData({ ...editRuleData, scene: e.target.value, scenes: [e.target.value] })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="subway">地铁出行</option>
+                    <option value="bus">公交车</option>
+                    <option value="shared_bike">共享单车</option>
+                    <option value="dining">餐饮美食</option>
+                    <option value="shopping">商超零售</option>
+                    <option value="online_shop">网上电商</option>
+                    <option value="entertainment">休闲娱乐</option>
+                    <option value="bills">生活缴费</option>
+                    <option value="any">通用消费</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
+                  <select
+                    value={editRuleData.channel}
+                    onChange={e => setEditRuleData({ ...editRuleData, channel: e.target.value })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="alipay">支付宝快捷支付</option>
+                    <option value="wechat">微信支付</option>
+                    <option value="unionpay">云闪付/银联</option>
+                    <option value="transit_code">乘车码</option>
+                    <option value="mobile_pay">手机Pay/Apple Pay</option>
+                    <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">不限渠道</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Benefit Type & Amounts */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">优惠类型</label>
+                  <select
+                    value={editRuleData.type}
+                    onChange={e => setEditRuleData({ ...editRuleData, type: e.target.value as any })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="fixed">固定立减 (元)</option>
+                    <option value="rate">折扣比例 (%)</option>
+                    <option value="threshold">门槛立减 (元)</option>
+                    <option value="cashback">达标返现 (元)</option>
+                    <option value="points">赠送积分 (点)</option>
+                    <option value="lottery">抽奖机会</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    {editRuleData.type === 'rate' ? '折扣比例 (%)' : '优惠金额 (元)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editRuleData.type === 'rate' ? editRuleData.rate : editRuleData.fixed}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value) || 0;
+                      if (editRuleData.type === 'rate') {
+                        setEditRuleData({ ...editRuleData, rate: val });
+                      } else {
+                        setEditRuleData({ ...editRuleData, fixed: val });
+                      }
+                    }}
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">满减门槛 (元)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editRuleData.min}
+                    onChange={e => setEditRuleData({ ...editRuleData, min: parseFloat(e.target.value) || 0 })}
+                    placeholder="0为无门槛"
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              {/* Time Window Section */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>生效时段限制 (HH:mm)</span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditRuleData({ ...editRuleData, start: '00:00', end: '23:59' })}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      全天生效
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditRuleData({ ...editRuleData, start: '06:30', end: '10:00' })}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      早高峰
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditRuleData({ ...editRuleData, start: '06:45', end: '10:15' })}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      通勤时段
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="time"
+                    value={editRuleData.start || '00:00'}
+                    onChange={e => setEditRuleData({ ...editRuleData, start: e.target.value })}
+                    className="w-1/2 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                  <span className="text-slate-400">至</span>
+                  <input
+                    type="time"
+                    value={editRuleData.end || '23:59'}
+                    onChange={e => setEditRuleData({ ...editRuleData, end: e.target.value })}
+                    className="w-1/2 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Usage Limit Section: 1次/月, 5次/月, 1次/日 etc. */}
+              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl space-y-2 border border-amber-200/60 dark:border-amber-900/40">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <label className="text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>频次与限额限制</span>
+                  </label>
+                  <span className="text-3xs text-slate-400">支持 1次/月、5次/月、1次/日等灵活限制</span>
+                </div>
+
+                {/* Quick Presets */}
+                <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                  {[
+                    { label: '1次/月', limit: 1, period: 'month' },
+                    { label: '5次/月', limit: 5, period: 'month' },
+                    { label: '10次/月', limit: 10, period: 'month' },
+                    { label: '1次/日', limit: 1, period: 'day' },
+                    { label: '2次/日', limit: 2, period: 'day' },
+                    { label: '1次/周', limit: 1, period: 'week' },
+                    { label: '不限次数', limit: null, period: 'month' }
+                  ].map(preset => {
+                    const isActive = editRuleData.limit === preset.limit && (preset.limit === null || editRuleData.limitPeriod === preset.period);
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setEditRuleData({
+                          ...editRuleData,
+                          limit: preset.limit,
+                          limitPeriod: preset.period as any
+                        })}
+                        className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
+                          isActive
+                            ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Detailed inputs: Limit number, period, usedCount */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制次数</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editRuleData.limit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setEditRuleData({ ...editRuleData, limit: val });
+                      }}
+                      placeholder="留空或0为不限"
+                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制周期</label>
+                    <select
+                      value={editRuleData.limitPeriod || 'month'}
+                      onChange={e => setEditRuleData({ ...editRuleData, limitPeriod: e.target.value as any })}
+                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    >
+                      <option value="month">次 / 每月 (如 1次/月, 5次/月)</option>
+                      <option value="day">次 / 每日 (如 1次/日, 2次/日)</option>
+                      <option value="week">次 / 每周 (如 1次/周)</option>
+                      <option value="total">次 / 活动期总计</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-2xs text-slate-600 dark:text-slate-400">已使用次数</label>
+                      <button
+                        type="button"
+                        onClick={() => setEditRuleData({ ...editRuleData, usedCount: 0 })}
+                        className="text-3xs text-indigo-600 dark:text-indigo-400 hover:underline"
+                      >
+                        清零
+                      </button>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editRuleData.usedCount ?? 0}
+                      onChange={e => setEditRuleData({ ...editRuleData, usedCount: parseInt(e.target.value, 10) || 0 })}
+                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Validity */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">开始日期</label>
+                  <input
+                    type="date"
+                    value={editRuleData.dateStart || ''}
+                    onChange={e => setEditRuleData({ ...editRuleData, dateStart: e.target.value })}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">截止日期</label>
+                  <input
+                    type="date"
+                    value={editRuleData.dateEnd || ''}
+                    onChange={e => setEditRuleData({ ...editRuleData, dateEnd: e.target.value })}
+                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Rule Notes */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">规则备注与领券指引</label>
+                <textarea
+                  rows={2}
+                  value={editRuleData.notes || ''}
+                  onChange={e => setEditRuleData({ ...editRuleData, notes: e.target.value })}
+                  placeholder="如：支付宝出行频道先领券后乘车；每月1日更新额度"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm(`确定要删除规则「${editRuleData.name}」吗？`)) {
+                    deleteRule(editRuleData.id);
+                    setEditingRule(null);
+                    setEditRuleData(null);
+                    setToastMsg(`规则已删除`);
+                    setTimeout(() => setToastMsg(null), 3000);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs text-rose-600 hover:text-rose-700 font-medium"
+              >
+                删除此规则
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingRule(null);
+                    setEditRuleData(null);
+                  }}
+                  className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-xs"
+                >
+                  保存修改
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Add Rule Modal */}
       {isAddRuleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
           <form
             onSubmit={handleAddRuleSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">添加新卡片优惠规则</h3>
               <button
                 type="button"
                 onClick={() => setIsAddRuleOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 p-1"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3.5 text-xs">
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">规则名称</label>
+                <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">规则名称</label>
                 <input
                   type="text"
                   required
@@ -542,7 +964,7 @@ export const LedgerFeedbackView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构</label>
                   <input
@@ -553,18 +975,20 @@ export const LedgerFeedbackView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">场景</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费场景</label>
                   <select
                     value={newRuleData.scene}
                     onChange={e => setNewRuleData({ ...newRuleData, scene: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="subway">地铁出行</option>
                     <option value="bus">公交车</option>
                     <option value="shared_bike">共享单车</option>
                     <option value="dining">餐饮美食</option>
                     <option value="shopping">商超零售</option>
-                    <option value="online_shop">网上购物</option>
+                    <option value="online_shop">网上电商</option>
+                    <option value="entertainment">休闲娱乐</option>
+                    <option value="bills">生活缴费</option>
                     <option value="any">通用消费</option>
                   </select>
                 </div>
@@ -573,28 +997,30 @@ export const LedgerFeedbackView: React.FC = () => {
                   <select
                     value={newRuleData.channel}
                     onChange={e => setNewRuleData({ ...newRuleData, channel: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="alipay">支付宝</option>
                     <option value="wechat">微信支付</option>
                     <option value="unionpay">云闪付</option>
                     <option value="transit_code">乘车码</option>
+                    <option value="mobile_pay">手机Pay</option>
                     <option value="bank_app">银行App</option>
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">优惠类型</label>
                   <select
                     value={newRuleData.type}
                     onChange={e => setNewRuleData({ ...newRuleData, type: e.target.value as any })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="fixed">固定立减</option>
-                    <option value="rate">按比例优惠(如5折)</option>
+                    <option value="fixed">固定立减 (元)</option>
+                    <option value="rate">折扣比例 (%)</option>
+                    <option value="threshold">门槛满减</option>
                     <option value="cashback">达标返现</option>
                     <option value="points">多倍积分</option>
                     <option value="lottery">达标抽奖</option>
@@ -622,33 +1048,113 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">生效时段起止</label>
+              {/* Time Window */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>生效时段起止</span>
+                  </label>
                   <div className="flex items-center gap-1">
-                    <input
-                      type="time"
-                      value={newRuleData.start}
-                      onChange={e => setNewRuleData({ ...newRuleData, start: e.target.value })}
-                      className="w-1/2 px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                    />
-                    <span>-</span>
-                    <input
-                      type="time"
-                      value={newRuleData.end}
-                      onChange={e => setNewRuleData({ ...newRuleData, end: e.target.value })}
-                      className="w-1/2 px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                    />
+                    <button
+                      type="button"
+                      onClick={() => setNewRuleData({ ...newRuleData, start: '00:00', end: '23:59' })}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-300"
+                    >
+                      全天
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewRuleData({ ...newRuleData, start: '06:30', end: '10:00' })}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-300"
+                    >
+                      早高峰
+                    </button>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">限额次数 (次/月)</label>
+                <div className="flex items-center gap-2">
                   <input
-                    type="number"
-                    value={newRuleData.limit || ''}
-                    onChange={e => setNewRuleData({ ...newRuleData, limit: parseInt(e.target.value, 10) || null })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    type="time"
+                    value={newRuleData.start}
+                    onChange={e => setNewRuleData({ ...newRuleData, start: e.target.value })}
+                    className="w-1/2 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
                   />
+                  <span>-</span>
+                  <input
+                    type="time"
+                    value={newRuleData.end}
+                    onChange={e => setNewRuleData({ ...newRuleData, end: e.target.value })}
+                    className="w-1/2 px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Usage Limit: 1次/月, 5次/月, 1次/日 etc. */}
+              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl space-y-2 border border-amber-200/60 dark:border-amber-900/40">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1.5">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>限额与频次限制</span>
+                  </label>
+                  <span className="text-3xs text-slate-400">支持 1次/月、5次/月、1次/日等</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1">
+                  {[
+                    { label: '1次/月', limit: 1, period: 'month' },
+                    { label: '5次/月', limit: 5, period: 'month' },
+                    { label: '1次/日', limit: 1, period: 'day' },
+                    { label: '2次/日', limit: 2, period: 'day' },
+                    { label: '1次/周', limit: 1, period: 'week' },
+                    { label: '不限次', limit: null, period: 'month' }
+                  ].map(preset => {
+                    const isActive = newRuleData.limit === preset.limit && (preset.limit === null || newRuleData.limitPeriod === preset.period);
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setNewRuleData({
+                          ...newRuleData,
+                          limit: preset.limit,
+                          limitPeriod: preset.period as any
+                        })}
+                        className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
+                          isActive
+                            ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
+                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制次数</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRuleData.limit ?? ''}
+                      onChange={e => setNewRuleData({ ...newRuleData, limit: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制周期</label>
+                    <select
+                      value={newRuleData.limitPeriod || 'month'}
+                      onChange={e => setNewRuleData({ ...newRuleData, limitPeriod: e.target.value as any })}
+                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    >
+                      <option value="month">次 / 每月 (如 1次/月, 5次/月)</option>
+                      <option value="day">次 / 每日 (如 1次/日, 2次/日)</option>
+                      <option value="week">次 / 每周 (如 1次/周)</option>
+                      <option value="total">次 / 活动期总计</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -680,6 +1186,13 @@ export const LedgerFeedbackView: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMsg && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <span>✓ {toastMsg}</span>
         </div>
       )}
     </div>
