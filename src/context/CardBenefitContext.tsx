@@ -29,6 +29,9 @@ interface CardBenefitContextType {
   addBankAssetEntry: (entry: Omit<BankAssetEntry, 'id'>) => void;
   updateBankAssetEntry: (entry: BankAssetEntry) => void;
   deleteBankAssetEntry: (id: string) => void;
+  addActivity: (activity: MilestoneActivity) => void;
+  updateActivity: (activity: MilestoneActivity) => void;
+  deleteActivity: (id: string) => void;
   importJsonData: (jsonString: string) => { success: boolean; message: string };
   exportJsonData: () => string;
   resetToDefaultData: () => void;
@@ -197,6 +200,30 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }));
   };
 
+  const addActivity = (activity: MilestoneActivity) => {
+    setState(prev => ({
+      ...prev,
+      activities: [activity, ...prev.activities],
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const updateActivity = (activity: MilestoneActivity) => {
+    setState(prev => ({
+      ...prev,
+      activities: prev.activities.map(a => (a.id === activity.id ? activity : a)),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
+  const deleteActivity = (id: string) => {
+    setState(prev => ({
+      ...prev,
+      activities: prev.activities.filter(a => a.id !== id),
+      lastUpdated: new Date().toISOString()
+    }));
+  };
+
   const importJsonData = (jsonString: string): { success: boolean; message: string } => {
     try {
       const data = JSON.parse(jsonString);
@@ -304,6 +331,9 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         addBankAssetEntry,
         updateBankAssetEntry,
         deleteBankAssetEntry,
+        addActivity,
+        updateActivity,
+        deleteActivity,
         importJsonData,
         exportJsonData,
         resetToDefaultData,

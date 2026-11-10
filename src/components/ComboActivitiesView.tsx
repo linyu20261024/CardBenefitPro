@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
 import { formatCurrency } from '../utils/engine';
+import { MilestoneActivity, RewardComboActivity, ActivityTier } from '../types/cardBenefit';
 import {
   Sparkles,
   CheckCircle2,
@@ -14,23 +15,23 @@ import {
   Layers,
   Flame,
   Plus,
+  Trash2,
   Calendar,
   AlertCircle,
   HelpCircle,
-  TrendingUp
+  TrendingUp,
+  Tag,
+  CreditCard,
+  ArrowRight
 } from 'lucide-react';
 
 export const ComboActivitiesView: React.FC = () => {
-  const { state, addFeedbackRecord } = useCardBenefit();
+  const { state, addFeedbackRecord, addActivity, deleteActivity } = useCardBenefit();
 
-  // Find CCB Combo activity
-  const ccbCombo = state.rewardActivities.find(a => a.name.includes('时光好礼')) || state.rewardActivities[0];
-  // Find Bocom Cumulative activity
-  const bocomActivity = state.activities.find(a => a.name.includes('最红星期五直通车') || a.name.includes('8000')) || state.activities[1];
-  // Find Alipay QuickPay activity
-  const alipayActivity = state.activities.find(a => a.name.includes('快捷支付')) || state.activities[state.activities.length - 1];
+  // Filter state
+  const [activeCategory, setActiveCategory] = useState<'all' | 'milestones' | 'combos' | 'quickpay'>('all');
 
-  // Quick record modal for combo
+  // Quick record modal
   const [quickSpendModal, setQuickSpendModal] = useState<{
     targetActivity: string;
     amount: number;
@@ -38,7 +39,68 @@ export const ComboActivitiesView: React.FC = () => {
     bank: string;
   } | null>(null);
 
+  // New activity modal
+  const [isNewActivityOpen, setIsNewActivityOpen] = useState(false);
+  const [newActivityType, setNewActivityType] = useState<'quickpay' | 'milestone' | 'custom'>('quickpay');
+  const [newActivityName, setNewActivityName] = useState('支付宝快捷支付11月满额达标');
+  const [newActivityBank, setNewActivityBank] = useState('支付宝/多行');
+  const [newActivityChannel, setNewActivityChannel] = useState('alipay');
+  const [newActivityNotes, setNewActivityNotes] = useState('支付宝快捷支付消费达标赢立减金与抽奖');
+  const [newActivityTiers, setNewActivityTiers] = useState<Array<{ target: number; rewardName: string; estimatedReward: number }>>([
+    { target: 1000, rewardName: '5元立减金', estimatedReward: 5 },
+    { target: 3000, rewardName: '15元红包', estimatedReward: 15 },
+    { target: 5000, rewardName: '88元锦鲤抽奖', estimatedReward: 20 }
+  ]);
+
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Compute spend for each activity based on feedback ledger + manual entries
+  const getActivitySpend = (activityName: string, bank?: string, channel?: string): number => {
+    // 1. Check if activity has preset currentSpend in user data
+    const matchedAct = state.activities.find(a => a.name === activityName);
+    let base = matchedAct?.currentSpend || 0;
+
+    // 2. Add confirmed feedback ledger items that contributed to this activity
+    const ledgerContribution = state.feedback
+      .filter(f => {
+        if (f.contributedActivities && f.contributedActivities.includes(activityName)) return true;
+        if (f.note && f.note.includes(activityName)) return true;
+        // Or if bank matches and rule implies participation
+        if (bank && f.bank === bank && f.ruleName.includes(activityName)) return true;
+        return false;
+      })
+      .reduce((sum, f) => sum + (f.amount || 0), 0);
+
+    return base + ledgerContribution;
+  };
+
+  // Filtered milestone activities
+  const filteredMilestones = useMemo(() => {
+    if (activeCategory === 'combos') return [];
+    return state.activities.filter(act => {
+      if (activeCategory === 'quickpay') {
+        return (
+          act.channel === 'alipay' ||
+          act.name.includes('快捷支付') ||
+          act.name.includes('支付宝')
+        );
+      }
+      return true;
+    });
+  }, [state.activities, activeCategory]);
+
+  // Filtered combo activities
+  const filteredCombos = useMemo(() => {
+    if (activeCategory === 'milestones') return [];
+    if (activeCategory === 'quickpay') {
+      return state.rewardActivities.filter(a =>
+        a.channels?.includes('alipay') || a.name.includes('快捷支付')
+      );
+    }
+    return state.rewardActivities;
+  }, [state.rewardActivities, activeCategory]);
+
+  const totalActivitiesCount = state.activities.length + state.rewardActivities.length;
 
   const handleQuickSpendSubmit = () => {
     if (!quickSpendModal) return;
@@ -47,10 +109,10 @@ export const ComboActivitiesView: React.FC = () => {
     addFeedbackRecord({
       ruleId: `combo-${Date.now()}`,
       ruleName: `${targetActivity} - 消费推进记账`,
-      bank,
+      bank: bank || '合作银行',
       scene: 'any',
       platform: channel === 'alipay' ? 'alipay' : 'bank_app',
-      channel,
+      channel: channel || 'any',
       amount,
       expected: 0,
       actual: 0,
@@ -66,9 +128,77 @@ export const ComboActivitiesView: React.FC = () => {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
+  const handleCreateActivity = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newActivityName.trim()) return;
+
+    const newAct: MilestoneActivity = {
+      id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      name: newActivityName.trim(),
+      bank: newActivityBank.trim() || '通用',
+      platform: 'any',
+      channel: newActivityChannel,
+      scene: 'any',
+      start: new Date().toISOString().slice(0, 10),
+      end: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      period: 'month',
+      rewardMode: 'cumulative',
+      notes: newActivityNotes.trim(),
+      tiers: newActivityTiers.map((t, idx) => ({
+        id: `tier-${Date.now()}-${idx}`,
+        target: t.target,
+        rewardName: t.rewardName,
+        estimatedReward: t.estimatedReward,
+        rewardStatus: 'unconfirmed',
+        actualReward: 0,
+        receivedDate: '',
+        rewardType: t.rewardName.includes('抽奖') ? 'lottery' : 'cashback',
+        points: 0
+      }))
+    };
+
+    addActivity(newAct);
+    setIsNewActivityOpen(false);
+    setToastMsg(`已成功添加活动「${newAct.name}」！`);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleAddPresetTemplate = (preset: 'alipay' | 'bocom' | 'points') => {
+    if (preset === 'alipay') {
+      setNewActivityName('支付宝快捷支付11月满额达标狂欢');
+      setNewActivityBank('支付宝');
+      setNewActivityChannel('alipay');
+      setNewActivityNotes('绑定信用卡快捷支付消费，满1000返5元，满3000送15元，满5000抽大奖88元');
+      setNewActivityTiers([
+        { target: 1000, rewardName: '5元刷卡金', estimatedReward: 5 },
+        { target: 3000, rewardName: '15元刷卡金', estimatedReward: 15 },
+        { target: 5000, rewardName: '88元锦鲤抽奖', estimatedReward: 25 }
+      ]);
+    } else if (preset === 'bocom') {
+      setNewActivityName('交通银行信用卡累计消费抽奖');
+      setNewActivityBank('交通银行');
+      setNewActivityChannel('any');
+      setNewActivityNotes('当月消费满5000元给1次抽奖，满8000元再给1次抽奖机会');
+      setNewActivityTiers([
+        { target: 5000, rewardName: '抽奖机会1次', estimatedReward: 15 },
+        { target: 8000, rewardName: '二重抽奖机会', estimatedReward: 20 }
+      ]);
+    } else {
+      setNewActivityName('信用卡多倍积分阶梯达标');
+      setNewActivityBank('通用');
+      setNewActivityChannel('any');
+      setNewActivityNotes('消费满额赠送海量综合积分');
+      setNewActivityTiers([
+        { target: 2000, rewardName: '赠2000积分', estimatedReward: 4 },
+        { target: 5000, rewardName: '赠6000积分', estimatedReward: 12 },
+        { target: 10000, rewardName: '赠15000积分', estimatedReward: 30 }
+      ]);
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Toast */}
+      {/* Toast Notification */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
           <CheckCircle2 className="w-5 h-5" />
@@ -76,352 +206,398 @@ export const ComboActivitiesView: React.FC = () => {
         </div>
       )}
 
-      {/* Header */}
+      {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
-            多重组合连击与支付宝快捷支付达标
+            多重组合连击与多维达标活动
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            日达标/周达标/连续周达标送积分，累计满5000/8000抽奖，与支付宝快捷支付满额任务
+            日/周/连续打卡连击、阶梯满额抽奖与返现，100% 动态展现您导入的实际活动
           </p>
+        </div>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => {
+              handleAddPresetTemplate('alipay');
+              setIsNewActivityOpen(true);
+            }}
+            className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>新增达标活动</span>
+          </button>
         </div>
       </div>
 
-      {state.activities.length === 0 && state.rewardActivities.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center space-y-3">
+      {/* Category Filter Pills */}
+      <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-x-auto scrollbar-none">
+        <button
+          onClick={() => setActiveCategory('all')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+            activeCategory === 'all'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          全部活动 ({totalActivitiesCount})
+        </button>
+        <button
+          onClick={() => setActiveCategory('milestones')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+            activeCategory === 'milestones'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          阶梯满额达标 ({state.activities.length})
+        </button>
+        <button
+          onClick={() => setActiveCategory('combos')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+            activeCategory === 'combos'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          组合连击打卡 ({state.rewardActivities.length})
+        </button>
+        <button
+          onClick={() => setActiveCategory('quickpay')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap flex items-center gap-1 ${
+            activeCategory === 'quickpay'
+              ? 'bg-sky-500 text-white shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+          }`}
+        >
+          <Flame className="w-3 h-3" />
+          <span>快捷支付达标</span>
+        </button>
+      </div>
+
+      {/* Empty State */}
+      {totalActivitiesCount === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center space-y-4">
           <Layers className="w-10 h-10 text-slate-400 mx-auto" />
-          <h3 className="text-base font-semibold text-slate-900 dark:text-white">暂无多重组合或快捷支付达标活动</h3>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white">暂无多重组合或达标活动</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-            当前卡包为空，所有数据保存在本地。请通过右上角「同步」导入您的 JSON 数据。
+            当前卡包内尚未包含任何达标活动。您可以通过右上角「同步」导入您的 JSON 数据，或直接使用下方模板快速创建：
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <button
+              onClick={() => {
+                handleAddPresetTemplate('alipay');
+                setIsNewActivityOpen(true);
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold bg-sky-500 hover:bg-sky-400 text-white rounded-lg transition-colors"
+            >
+              + 支付宝快捷支付满额活动
+            </button>
+            <button
+              onClick={() => {
+                handleAddPresetTemplate('bocom');
+                setIsNewActivityOpen(true);
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold bg-rose-500 hover:bg-rose-400 text-white rounded-lg transition-colors"
+            >
+              + 满5000/8000抽奖活动
+            </button>
+          </div>
         </div>
       ) : (
-        <>
-          {/* Section 1: 支付宝快捷支付满额达标活动 (Explicitly requested!) */}
-          {alipayActivity && (
-            <div className="bg-gradient-to-r from-sky-900 via-indigo-900 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-sky-500/20 space-y-5">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400">
-              <Flame className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold">支付宝快捷支付 11月满额达标狂欢</h2>
-                <span className="px-2 py-0.5 text-2xs font-bold bg-sky-400 text-slate-950 rounded">重点达标活动</span>
-              </div>
-              <p className="text-xs text-slate-300 mt-0.5">
-                绑定信用卡使用快捷支付消费，累计满1000返5元、满3000送15元、满5000抽大奖88元
-              </p>
-            </div>
-          </div>
+        <div className="space-y-6">
+          {/* Section 1: Dynamic Milestone Activities from User JSON */}
+          {filteredMilestones.map(activity => {
+            const currentSpend = getActivitySpend(activity.name, activity.bank, activity.channel);
+            const highestTier = activity.tiers.reduce((max, t) => (t.target > max ? t.target : max), 1);
+            const nextTier = activity.tiers.find(t => t.target > currentSpend);
+            const isAlipayQuickpay =
+              activity.channel === 'alipay' ||
+              activity.name.includes('快捷支付') ||
+              activity.name.includes('支付宝');
 
-          <button
-            onClick={() =>
-              setQuickSpendModal({
-                targetActivity: '支付宝快捷支付11月满额达标狂欢',
-                amount: 500,
-                channel: 'alipay',
-                bank: '支付宝'
-              })
-            }
-            className="px-3.5 py-2 text-xs font-bold text-slate-950 bg-sky-400 hover:bg-sky-300 rounded-lg transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
-          >
-            <Plus className="w-4 h-4" />
-            <span>记录快捷支付消费</span>
-          </button>
-        </div>
-
-        {/* Progress & Milestone Tiers */}
-        <div className="space-y-4">
-            <div className="flex items-baseline justify-between">
-              <div className="space-y-0.5">
-                <span className="text-xs text-slate-300">本月快捷支付已累计消费</span>
-                <div className="text-2xl sm:text-3xl font-extrabold font-mono tabular-nums text-white">
-                  {formatCurrency(alipayActivity.currentSpend || 3450)}
-                </div>
-              </div>
-              <div className="text-right text-xs text-slate-300">
-                <span>距下一档(满¥5000抽大奖)还差: </span>
-                <span className="font-bold text-amber-300 font-mono">
-                  {formatCurrency(Math.max(0, 5000 - (alipayActivity.currentSpend || 3450)))}
-                </span>
-              </div>
-            </div>
-
-            {/* Stepped progress bar */}
-            <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden">
+            return (
               <div
-                className="bg-sky-400 h-full rounded-full transition-all"
-                style={{ width: `${Math.min(100, ((alipayActivity.currentSpend || 3450) / 10000) * 100)}%` }}
-              />
-            </div>
+                key={activity.id}
+                className={`rounded-2xl p-4 sm:p-6 border transition-all space-y-5 ${
+                  isAlipayQuickpay
+                    ? 'bg-gradient-to-r from-sky-950 via-slate-900 to-indigo-950 text-white border-sky-500/30 shadow-md'
+                    : 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white border-slate-200 dark:border-slate-800 shadow-2xs'
+                }`}
+              >
+                {/* Header row */}
+                <div
+                  className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b ${
+                    isAlipayQuickpay ? 'border-white/10' : 'border-slate-100 dark:border-slate-800'
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        isAlipayQuickpay
+                          ? 'bg-sky-500/20 text-sky-400 border border-sky-400/30'
+                          : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400'
+                      }`}
+                    >
+                      {isAlipayQuickpay ? <Flame className="w-5 h-5" /> : <Gift className="w-5 h-5" />}
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-base sm:text-lg font-bold">{activity.name}</h2>
+                        <span
+                          className={`px-2 py-0.5 text-2xs font-bold rounded ${
+                            isAlipayQuickpay
+                              ? 'bg-sky-400 text-slate-950'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {activity.bank || '合作银行'}
+                        </span>
+                        {isAlipayQuickpay && (
+                          <span className="px-2 py-0.5 text-2xs font-bold bg-amber-400 text-slate-950 rounded">
+                            快捷支付
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`text-xs mt-0.5 flex flex-wrap items-center gap-3 ${
+                          isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        <span>
+                          有效期: {activity.start} ~ {activity.end}
+                        </span>
+                        <span>渠道: {activity.channel === 'any' ? '不限渠道' : activity.channel}</span>
+                        {activity.notes && <span>· {activity.notes}</span>}
+                      </div>
+                    </div>
+                  </div>
 
-            {/* Tier milestones cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              {alipayActivity.tiers.map((tier, idx) => {
-                const currentSpend = alipayActivity.currentSpend || 3450;
-                const isAchieved = currentSpend >= tier.target;
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    <button
+                      onClick={() =>
+                        setQuickSpendModal({
+                          targetActivity: activity.name,
+                          amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
+                          channel: activity.channel === 'any' ? 'alipay' : activity.channel,
+                          bank: activity.bank || '合作银行'
+                        })
+                      }
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs ${
+                        isAlipayQuickpay
+                          ? 'bg-sky-400 hover:bg-sky-300 text-slate-950'
+                          : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-white dark:text-slate-900'
+                      }`}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>记录消费</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`确认删除活动「${activity.name}」吗？`)) {
+                          deleteActivity(activity.id);
+                        }
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      title="删除活动"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
 
-                return (
-                  <div
-                    key={tier.id}
-                    className={`p-3.5 rounded-xl border transition-all ${
-                      isAchieved
-                        ? 'bg-sky-500/15 border-sky-400/40 text-white'
-                        : 'bg-white/5 border-white/10 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-bold font-mono">满 ¥{tier.target}</span>
-                      {isAchieved ? (
-                        <span className="flex items-center gap-1 text-2xs font-semibold text-sky-300">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> 已达成
+                {/* Progress bar & Numbers */}
+                <div className="space-y-3">
+                  <div className="flex items-baseline justify-between text-xs">
+                    <div>
+                      <span className={isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
+                        本期累计已计入消费:
+                      </span>{' '}
+                      <span className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums">
+                        {formatCurrency(currentSpend)}
+                      </span>
+                    </div>
+
+                    <div className="text-right">
+                      {nextTier ? (
+                        <span>
+                          距下一档(满¥{nextTier.target})还差:{' '}
+                          <span className="font-bold text-amber-500 font-mono">
+                            {formatCurrency(Math.max(0, nextTier.target - currentSpend))}
+                          </span>
                         </span>
                       ) : (
-                        <span className="text-2xs text-slate-400 font-mono">
-                          差 ¥{tier.target - currentSpend}
+                        <span className="text-emerald-500 font-semibold flex items-center gap-1">
+                          <CheckCircle2 className="w-4 h-4 inline" /> 已达成最高阶梯！
                         </span>
                       )}
                     </div>
-                    <div className="text-xs font-semibold text-amber-300 mt-1">
-                      {tier.rewardName}
+                  </div>
+
+                  {/* Stepped progress bar */}
+                  <div
+                    className={`w-full rounded-full h-2.5 overflow-hidden ${
+                      isAlipayQuickpay ? 'bg-white/10' : 'bg-slate-100 dark:bg-slate-800'
+                    }`}
+                  >
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        isAlipayQuickpay ? 'bg-sky-400' : 'bg-indigo-600 dark:bg-indigo-400'
+                      }`}
+                      style={{
+                        width: `${Math.min(100, (currentSpend / highestTier) * 100)}%`
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Milestone Tiers Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {activity.tiers.map((tier, idx) => {
+                    const isAchieved = currentSpend >= tier.target;
+                    const diff = tier.target - currentSpend;
+
+                    return (
+                      <div
+                        key={tier.id || idx}
+                        className={`p-3.5 rounded-xl border transition-all space-y-1.5 ${
+                          isAchieved
+                            ? isAlipayQuickpay
+                              ? 'bg-sky-500/20 border-sky-400/40 text-white'
+                              : 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800 text-slate-900 dark:text-white'
+                            : isAlipayQuickpay
+                            ? 'bg-white/5 border-white/10 text-slate-300'
+                            : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold font-mono">满 ¥{tier.target}</span>
+                          {isAchieved ? (
+                            <span className="flex items-center gap-1 text-2xs font-bold text-emerald-500 dark:text-emerald-400">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> 已达成
+                            </span>
+                          ) : (
+                            <span className="text-2xs text-slate-400 font-mono">差 ¥{diff}</span>
+                          )}
+                        </div>
+
+                        <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400 line-clamp-1">
+                          {tier.rewardName}
+                        </div>
+
+                        <div className="text-3xs text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-700/40">
+                          <span>预估价值: ¥{tier.estimatedReward || 0}</span>
+                          <span>{tier.rewardStatus === 'confirmed' ? '已领取' : '达成即领'}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Section 2: Dynamic Reward Combo Activities from User JSON */}
+          {filteredCombos.map(combo => (
+            <div
+              key={combo.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xs space-y-5"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-start sm:items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <Coins className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                        {combo.name}
+                      </h2>
+                      <span className="px-2 py-0.5 text-2xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
+                        多重打卡连击
+                      </span>
                     </div>
-                    <div className="text-2xs text-slate-400 mt-1">
-                      预估收益: ¥{tier.estimatedReward} · {tier.rewardStatus === 'confirmed' ? '已发放' : '达成即领'}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      支持日达标、周达标、连续周达标与指定日加码 · {combo.start} ~ {combo.end}
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Section 2: 组合活动 - 日达标送积分 / 周达标送积分 / 连续周达标送积分 (建行时光好礼) */}
-      {ccbCombo && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  建设银行龙卡时光好礼 (多重组合连击机制)
-                </h2>
-                <span className="text-xs text-indigo-600 dark:text-indigo-400 font-medium">
-                  日达标 · 周达标 · 连续周达标 · 指定日加码
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                单笔满16元触发每日送分；每周满200元送1000分；月内连续4周达标月底再追加1000分
-              </p>
-            </div>
-
-            <button
-              onClick={() =>
-                setQuickSpendModal({
-                  targetActivity: '建设银行龙卡信用卡时光好礼11月',
-                  amount: 16,
-                  channel: 'alipay',
-                  bank: '建设银行'
-                })
-              }
-              className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
-            >
-              <Coins className="w-3.5 h-3.5" />
-              <span>今日满16元打卡</span>
-            </button>
-          </div>
-
-          {/* 4 Combo Rules Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Rule 1: 日达标 */}
-            <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/50 dark:bg-emerald-950/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                  01. 日达标送积分
-                </span>
-                <span className="text-2xs font-semibold text-emerald-600 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded">
-                  今日已达标 ✓
-                </span>
-              </div>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">
-                每日单笔满 16 元
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                每日消费满16元，立获赠 100 综合积分，可用于折抵账单。
-              </p>
-              <div className="pt-2 text-2xs text-emerald-700 dark:text-emerald-400 font-mono font-semibold">
-                奖励: +100 综合积分 (日限1次)
-              </div>
-            </div>
-
-            {/* Rule 2: 周达标 */}
-            <div className="p-4 rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-indigo-800 dark:text-indigo-300">
-                  02. 周达标送积分
-                </span>
-                <span className="text-2xs font-semibold text-indigo-600 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded">
-                  本周已达标 ✓
-                </span>
-              </div>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">
-                每周累计满 200 元
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                自然周内累计消费满200元且满3笔，奖励 1000 积分。当前累计: ¥320。
-              </p>
-              <div className="pt-2 text-2xs text-indigo-700 dark:text-indigo-400 font-mono font-semibold">
-                奖励: +1000 综合积分
-              </div>
-            </div>
-
-            {/* Rule 3: 连续周达标 */}
-            <div className="p-4 rounded-xl border border-purple-200 dark:border-purple-900/40 bg-purple-50/50 dark:bg-purple-950/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-purple-800 dark:text-purple-300">
-                  03. 月内连续周达标
-                </span>
-                <span className="text-2xs font-semibold text-purple-600 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded">
-                  第1周达成 (1/4)
-                </span>
-              </div>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">
-                连续 4 周连续达标
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                11月内连续4个自然周均完成周满200元任务，月末额外获赠终极大奖。
-              </p>
-              <div className="pt-2 text-2xs text-purple-700 dark:text-purple-400 font-mono font-semibold">
-                奖励: +1000 综合积分大礼
-              </div>
-            </div>
-
-            {/* Rule 4: 指定日加码 */}
-            <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-amber-800 dark:text-amber-300">
-                  04. 指定日专属加码
-                </span>
-                <span className="text-2xs font-semibold text-amber-600 bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded">
-                  逢6/16/26日及周六
-                </span>
-              </div>
-              <div className="text-sm font-bold text-slate-900 dark:text-white">
-                特定日期满16元
-              </div>
-              <p className="text-xs text-slate-600 dark:text-slate-400">
-                周六或每月6日、16日、26日单笔满16元额外叠加获赠100积分。
-              </p>
-              <div className="pt-2 text-2xs text-amber-700 dark:text-amber-400 font-mono font-semibold">
-                奖励: 额外叠加 100 积分
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Section 3: 累计达标活动 - 满5000给抽奖机会1次 8000再给1次 (交行最红直通车) */}
-      {bocomActivity && (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xs space-y-5">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  交通银行最红星期五直通车 (累计消费双重抽奖)
-                </h2>
-                <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">
-                  满5000抽奖1次 · 满8000再给1次
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                当月累计消费达标即可解锁最红抽奖机会，最高可赢取 1000 元刷卡金与实物大礼
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-500 font-mono">当前消费: ¥5,200</span>
-              <button
-                onClick={() =>
-                  setQuickSpendModal({
-                    targetActivity: '交通银行11月最红星期五直通车',
-                    amount: 1000,
-                    channel: 'any',
-                    bank: '交通银行'
-                  })
-                }
-                className="px-3 py-1.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-xs"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>追加记账</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 5000 & 8000 Milestone cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Milestone 1: 5000 */}
-            <div className="p-4 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Gift className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
-                    第一档：满 5,000 元
-                  </span>
                 </div>
-                <span className="px-2 py-0.5 text-2xs font-bold text-emerald-700 bg-emerald-100 dark:bg-emerald-900 dark:text-emerald-300 rounded">
-                  已达标 · 已获得抽奖机会 1 次
-                </span>
+
+                <button
+                  onClick={() =>
+                    setQuickSpendModal({
+                      targetActivity: combo.name,
+                      amount: 16,
+                      channel: combo.channels?.[0] || 'alipay',
+                      bank: combo.bank || '建设银行'
+                    })
+                  }
+                  className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 self-start sm:self-auto shrink-0 shadow-xs"
+                >
+                  <Coins className="w-3.5 h-3.5" />
+                  <span>打卡记账</span>
+                </button>
               </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                消费满 5000 元即刻获赠直通抽奖机会 1 次，并可参与 15 元刷卡金返现。
-              </p>
+              {/* Combo Rules Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {combo.rules.map((rule, idx) => {
+                  return (
+                    <div
+                      key={rule.id || idx}
+                      className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                          {rule.name || `规则 0${idx + 1}`}
+                        </span>
+                        <span className="text-3xs font-semibold px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                          {rule.type === 'daily'
+                            ? '日达标'
+                            : rule.type === 'weekly'
+                            ? '周达标'
+                            : rule.type === 'streak'
+                            ? '连击达标'
+                            : rule.type === 'ranking'
+                            ? '排名挑战'
+                            : '特定日'}
+                        </span>
+                      </div>
 
-              <div className="flex items-center justify-between text-xs font-mono pt-2 border-t border-emerald-200 dark:border-emerald-900/40">
-                <span className="text-slate-500">累计消费: ¥5,200 / ¥5,000</span>
-                <span className="text-emerald-600 font-bold">100% 完成</span>
+                      <div className="text-sm font-bold text-slate-900 dark:text-white">
+                        {rule.amount > 0 ? `消费满 ${rule.amount} 元` : '按排位奖励'}
+                      </div>
+
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                        {rule.notes ||
+                          (rule.dateSpec
+                            ? `指定日期: ${rule.dateSpec}`
+                            : rule.streak
+                            ? `需连续 ${rule.streak} 个周期达标`
+                            : '按交易频次与金额达标发放')}
+                      </p>
+
+                      <div className="pt-2 text-2xs font-semibold text-emerald-600 dark:text-emerald-400 font-mono">
+                        奖励: +{rule.reward} {rule.rewardType === 'points' ? '积分' : '元'}
+                        {rule.cap > 0 && ` (封顶${rule.cap})`}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-
-            {/* Milestone 2: 8000 */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Gift className="w-5 h-5 text-slate-400" />
-                  <span className="text-sm font-bold text-slate-900 dark:text-white">
-                    第二档：满 8,000 元
-                  </span>
-                </div>
-                <span className="px-2 py-0.5 text-2xs font-bold text-slate-600 bg-slate-200 dark:bg-slate-700 dark:text-slate-300 rounded">
-                  差 ¥2,800 · 待冲刺
-                </span>
-              </div>
-
-              <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-                消费达 8000 元再追加给 1 次抽奖机会，最高可抽 1000 元大奖，奖池更大。
-              </p>
-
-              <div className="flex items-center justify-between text-xs font-mono pt-2 border-t border-slate-200 dark:border-slate-700">
-                <span className="text-slate-500">当前进度: ¥5,200 / ¥8,000</span>
-                <span className="text-slate-700 dark:text-slate-300 font-bold">65% 完成</span>
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
       )}
-      </>
-    )}
 
       {/* Quick Spend Modal */}
       {quickSpendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                记录消费以推进活动进度
-              </h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">记录消费以推进活动进度</h3>
               <button
                 onClick={() => setQuickSpendModal(null)}
                 className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
@@ -436,9 +612,7 @@ export const ComboActivitiesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
-                  本次消费金额 (元)
-                </label>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本次消费金额 (元)</label>
                 <input
                   type="number"
                   step="any"
@@ -454,9 +628,7 @@ export const ComboActivitiesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
-                  支付渠道
-                </label>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                 <select
                   value={quickSpendModal.channel}
                   onChange={e =>
@@ -493,6 +665,185 @@ export const ComboActivitiesView: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* New Activity Modal */}
+      {isNewActivityOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <form
+            onSubmit={handleCreateActivity}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">添加新达标活动</h3>
+              <button
+                type="button"
+                onClick={() => setIsNewActivityOpen(false)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Quick Templates */}
+            <div>
+              <label className="block text-2xs font-semibold text-slate-500 mb-1">选择预设模板</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAddPresetTemplate('alipay')}
+                  className="px-2.5 py-1 text-2xs font-medium rounded-lg bg-sky-50 dark:bg-sky-950 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800"
+                >
+                  支付宝快捷支付满额
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddPresetTemplate('bocom')}
+                  className="px-2.5 py-1 text-2xs font-medium rounded-lg bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
+                >
+                  满5000/8000抽奖
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleAddPresetTemplate('points')}
+                  className="px-2.5 py-1 text-2xs font-medium rounded-lg bg-purple-50 dark:bg-purple-950 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800"
+                >
+                  多倍积分达标
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动名称</label>
+                <input
+                  type="text"
+                  required
+                  value={newActivityName}
+                  onChange={e => setNewActivityName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行 / 机构</label>
+                  <input
+                    type="text"
+                    value={newActivityBank}
+                    onChange={e => setNewActivityBank(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定支付渠道</label>
+                  <select
+                    value={newActivityChannel}
+                    onChange={e => setNewActivityChannel(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="alipay">支付宝快捷支付</option>
+                    <option value="wechat">微信支付</option>
+                    <option value="unionpay">银联云闪付</option>
+                    <option value="any">不限渠道</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则说明</label>
+                <input
+                  type="text"
+                  value={newActivityNotes}
+                  onChange={e => setNewActivityNotes(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              {/* Tiers Editor */}
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">阶梯奖励设置</label>
+                <div className="space-y-2">
+                  {newActivityTiers.map((tier, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-2xs text-slate-400 font-mono w-10">档位{idx + 1}</span>
+                      <input
+                        type="number"
+                        placeholder="门槛(元)"
+                        value={tier.target}
+                        onChange={e => {
+                          const updated = [...newActivityTiers];
+                          updated[idx].target = parseFloat(e.target.value) || 0;
+                          setNewActivityTiers(updated);
+                        }}
+                        className="w-24 px-2 py-1.5 font-mono text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                      />
+                      <input
+                        type="text"
+                        placeholder="奖励说明"
+                        value={tier.rewardName}
+                        onChange={e => {
+                          const updated = [...newActivityTiers];
+                          updated[idx].rewardName = e.target.value;
+                          setNewActivityTiers(updated);
+                        }}
+                        className="flex-1 px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                      />
+                      <input
+                        type="number"
+                        placeholder="折合价值(元)"
+                        value={tier.estimatedReward}
+                        onChange={e => {
+                          const updated = [...newActivityTiers];
+                          updated[idx].estimatedReward = parseFloat(e.target.value) || 0;
+                          setNewActivityTiers(updated);
+                        }}
+                        className="w-20 px-2 py-1.5 font-mono text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                      />
+                      {newActivityTiers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setNewActivityTiers(newActivityTiers.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-rose-500 p-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setNewActivityTiers([
+                        ...newActivityTiers,
+                        { target: 10000, rewardName: '额外大礼', estimatedReward: 50 }
+                      ])
+                    }
+                    className="text-2xs font-semibold text-indigo-600 dark:text-indigo-400 hover:underline"
+                  >
+                    + 增加阶梯档位
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsNewActivityOpen(false)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
+              >
+                确认创建
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>
