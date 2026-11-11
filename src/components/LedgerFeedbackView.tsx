@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { formatCurrency } from '../utils/engine';
+import { formatCurrency, calculateRuleUsage, getLocalDateString, getNowLocalDateTimeString } from '../utils/engine';
 import { FeedbackRecord, InstantRule } from '../types/cardBenefit';
 import {
   History,
@@ -74,8 +74,12 @@ export const LedgerFeedbackView: React.FC = () => {
     dateEnd: '2026-12-31',
     start: '00:00',
     end: '23:59',
+    dailyLimit: 1,
+    weeklyLimit: null,
+    monthlyLimit: 15,
+    totalLimit: null,
     limit: 1,
-    limitPeriod: 'month',
+    limitPeriod: 'day',
     usedCount: 0,
     notes: ''
   });
@@ -106,7 +110,7 @@ export const LedgerFeedbackView: React.FC = () => {
       actual: newFeedbackData.actual,
       confirmed: true,
       result: 'confirmed',
-      when: new Date().toISOString().slice(0, 16),
+      when: getNowLocalDateTimeString(),
       note: newFeedbackData.note
     });
     setIsAddFeedbackOpen(false);
@@ -132,8 +136,12 @@ export const LedgerFeedbackView: React.FC = () => {
       dateEnd: newRuleData.dateEnd || '',
       start: newRuleData.start || '00:00',
       end: newRuleData.end || '23:59',
-      limit: Number(newRuleData.limit) || null,
-      limitPeriod: (newRuleData.limitPeriod as any) || 'month',
+      dailyLimit: newRuleData.dailyLimit ? Number(newRuleData.dailyLimit) : (newRuleData.limitPeriod === 'day' && newRuleData.limit ? Number(newRuleData.limit) : null),
+      weeklyLimit: newRuleData.weeklyLimit ? Number(newRuleData.weeklyLimit) : (newRuleData.limitPeriod === 'week' && newRuleData.limit ? Number(newRuleData.limit) : null),
+      monthlyLimit: newRuleData.monthlyLimit ? Number(newRuleData.monthlyLimit) : (newRuleData.limitPeriod === 'month' && newRuleData.limit ? Number(newRuleData.limit) : null),
+      totalLimit: newRuleData.totalLimit ? Number(newRuleData.totalLimit) : (newRuleData.limitPeriod === 'total' && newRuleData.limit ? Number(newRuleData.limit) : null),
+      limit: newRuleData.dailyLimit || newRuleData.monthlyLimit || newRuleData.weeklyLimit || newRuleData.limit || null,
+      limitPeriod: (newRuleData.limitPeriod as any) || (newRuleData.dailyLimit ? 'day' : 'month'),
       notes: newRuleData.notes || '',
       enabled: true
     });
@@ -155,8 +163,12 @@ export const LedgerFeedbackView: React.FC = () => {
       dateEnd: '2026-12-31',
       start: '00:00',
       end: '23:59',
+      dailyLimit: 1,
+      weeklyLimit: null,
+      monthlyLimit: 15,
+      totalLimit: null,
       limit: 1,
-      limitPeriod: 'month',
+      limitPeriod: 'day',
       usedCount: 0,
       notes: ''
     });
@@ -166,6 +178,10 @@ export const LedgerFeedbackView: React.FC = () => {
     setEditingRule(rule);
     setEditRuleData({
       ...rule,
+      dailyLimit: rule.dailyLimit ?? (rule.limitPeriod === 'day' ? rule.limit : null),
+      weeklyLimit: rule.weeklyLimit ?? (rule.limitPeriod === 'week' ? rule.limit : null),
+      monthlyLimit: rule.monthlyLimit ?? (rule.limitPeriod === 'month' ? rule.limit : null),
+      totalLimit: rule.totalLimit ?? (rule.limitPeriod === 'total' ? rule.limit : null),
       usedCount: rule.usedCount ?? 0,
       limitPeriod: rule.limitPeriod || 'month'
     });
@@ -180,7 +196,11 @@ export const LedgerFeedbackView: React.FC = () => {
       cap: Number(editRuleData.cap) || 0,
       min: Number(editRuleData.min) || 0,
       fixed: Number(editRuleData.fixed) || 0,
-      limit: editRuleData.limit ? Number(editRuleData.limit) : null,
+      dailyLimit: editRuleData.dailyLimit ? Number(editRuleData.dailyLimit) : null,
+      weeklyLimit: editRuleData.weeklyLimit ? Number(editRuleData.weeklyLimit) : null,
+      monthlyLimit: editRuleData.monthlyLimit ? Number(editRuleData.monthlyLimit) : null,
+      totalLimit: editRuleData.totalLimit ? Number(editRuleData.totalLimit) : null,
+      limit: editRuleData.dailyLimit || editRuleData.monthlyLimit || editRuleData.weeklyLimit || editRuleData.limit || null,
       usedCount: Number(editRuleData.usedCount) || 0
     });
     setToastMsg(`规则「${editRuleData.name}」已成功保存！`);
@@ -418,19 +438,64 @@ export const LedgerFeedbackView: React.FC = () => {
                             ? `${rule.start}-${rule.end}`
                             : '全天生效'}
                         </div>
-                        <div className="mt-0.5">
-                          {rule.limit ? (
-                            <span className="inline-flex items-center gap-1">
-                              <span className="font-semibold text-amber-600 dark:text-amber-400">
-                                {rule.limit}次/{rule.limitPeriod === 'day' ? '日' : rule.limitPeriod === 'week' ? '周' : rule.limitPeriod === 'total' ? '活动期' : '月'}
-                              </span>
-                              <span className="text-3xs text-slate-400">
-                                (已用 {rule.usedCount || 0}次)
-                              </span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400">不限频次</span>
-                          )}
+                        <div className="mt-1">
+                          {(() => {
+                            const usage = calculateRuleUsage(rule, state.feedback, getLocalDateString());
+                            const limits: { text: string; sub: string; exceeded: boolean }[] = [];
+                            
+                            const dLimit = rule.dailyLimit ?? (rule.limitPeriod === 'day' ? rule.limit : null);
+                            const wLimit = rule.weeklyLimit ?? (rule.limitPeriod === 'week' ? rule.limit : null);
+                            const mLimit = rule.monthlyLimit ?? (rule.limitPeriod === 'month' ? rule.limit : null);
+                            const tLimit = rule.totalLimit ?? (rule.limitPeriod === 'total' ? rule.limit : null);
+
+                            if (dLimit && dLimit > 0) {
+                              limits.push({
+                                text: `${dLimit}次/日`,
+                                sub: `今日余${Math.max(0, dLimit - usage.dailyUsage)}次`,
+                                exceeded: usage.dailyUsage >= dLimit
+                              });
+                            }
+                            if (wLimit && wLimit > 0) {
+                              limits.push({
+                                text: `${wLimit}次/周`,
+                                sub: `本周余${Math.max(0, wLimit - usage.weeklyUsage)}次`,
+                                exceeded: usage.weeklyUsage >= wLimit
+                              });
+                            }
+                            if (mLimit && mLimit > 0) {
+                              limits.push({
+                                text: `${mLimit}次/月`,
+                                sub: `本月余${Math.max(0, mLimit - usage.monthlyUsage)}次`,
+                                exceeded: usage.monthlyUsage >= mLimit
+                              });
+                            }
+                            if (tLimit && tLimit > 0) {
+                              limits.push({
+                                text: `${tLimit}次/总`,
+                                sub: `总余${Math.max(0, tLimit - usage.totalUsage)}次`,
+                                exceeded: usage.totalUsage >= tLimit
+                              });
+                            }
+
+                            if (limits.length === 0) {
+                              return <span className="text-slate-400">不限频次</span>;
+                            }
+
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                {limits.map((l, idx) => (
+                                  <div key={idx} className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`font-semibold ${l.exceeded ? 'text-rose-500 dark:text-rose-400' : 'text-amber-600 dark:text-amber-400'}`}>
+                                      {l.text}
+                                    </span>
+                                    <span className={`text-3xs ${l.exceeded ? 'text-rose-400 font-medium' : 'text-slate-400'}`}>
+                                      ({l.sub})
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -763,100 +828,149 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Usage Limit Section: 1次/月, 5次/月, 1次/日 etc. */}
-              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl space-y-2 border border-amber-200/60 dark:border-amber-900/40">
+              {/* Parallel Usage Limit Section: 1次/日 与 15次/月 并行限制 */}
+              <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/20 rounded-xl space-y-2.5 border border-amber-200/70 dark:border-amber-900/50">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <label className="text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    <span>频次与限额限制</span>
+                    <span>频次与限额并行控制</span>
                   </label>
-                  <span className="text-3xs text-slate-400">支持 1次/月、5次/月、1次/日等灵活限制</span>
+                  <span className="text-3xs text-amber-700 dark:text-amber-400 font-medium">
+                    支持「1次/日」与「15次/月」同时并行生效
+                  </span>
                 </div>
 
                 {/* Quick Presets */}
-                <div className="flex flex-wrap items-center gap-1 pt-0.5">
-                  {[
-                    { label: '1次/月', limit: 1, period: 'month' },
-                    { label: '5次/月', limit: 5, period: 'month' },
-                    { label: '10次/月', limit: 10, period: 'month' },
-                    { label: '1次/日', limit: 1, period: 'day' },
-                    { label: '2次/日', limit: 2, period: 'day' },
-                    { label: '1次/周', limit: 1, period: 'week' },
-                    { label: '不限次数', limit: null, period: 'month' }
-                  ].map(preset => {
-                    const isActive = editRuleData.limit === preset.limit && (preset.limit === null || editRuleData.limitPeriod === preset.period);
-                    return (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setEditRuleData({
-                          ...editRuleData,
-                          limit: preset.limit,
-                          limitPeriod: preset.period as any
-                        })}
-                        className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
-                          isActive
-                            ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
+                <div className="space-y-1">
+                  <div className="text-3xs text-slate-500 font-medium">快捷预设模板：</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { label: '1次/日 · 15次/月 (通勤推荐)', d: 1, w: null, m: 15, t: null },
+                      { label: '1次/日 · 5次/月', d: 1, w: null, m: 5, t: null },
+                      { label: '1次/日 · 30次/月', d: 1, w: null, m: 30, t: null },
+                      { label: '1次/周 · 4次/月', d: null, w: 1, m: 4, t: null },
+                      { label: '1次/日', d: 1, w: null, m: null, t: null },
+                      { label: '1次/周', d: null, w: 1, m: null, t: null },
+                      { label: '5次/月', d: null, w: null, m: 5, t: null },
+                      { label: '1次/月', d: null, w: null, m: 1, t: null },
+                      { label: '不限频次', d: null, w: null, m: null, t: null }
+                    ].map(preset => {
+                      const isActive =
+                        editRuleData.dailyLimit === preset.d &&
+                        editRuleData.weeklyLimit === preset.w &&
+                        editRuleData.monthlyLimit === preset.m &&
+                        editRuleData.totalLimit === preset.t;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setEditRuleData({
+                            ...editRuleData,
+                            dailyLimit: preset.d,
+                            weeklyLimit: preset.w,
+                            monthlyLimit: preset.m,
+                            totalLimit: preset.t,
+                            limit: preset.d || preset.m || preset.w || preset.t || null,
+                            limitPeriod: preset.d ? 'day' : preset.w ? 'week' : preset.m ? 'month' : 'total'
+                          })}
+                          className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
+                            isActive
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
+                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Detailed inputs: Limit number, period, usedCount */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                {/* Parallel Limit Inputs */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div>
-                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制次数</label>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      日限额 (次/日)
+                    </label>
                     <input
                       type="number"
                       min="0"
-                      value={editRuleData.limit ?? ''}
+                      value={editRuleData.dailyLimit ?? ''}
                       onChange={e => {
                         const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
-                        setEditRuleData({ ...editRuleData, limit: val });
+                        setEditRuleData({ ...editRuleData, dailyLimit: val });
                       }}
-                      placeholder="留空或0为不限"
-                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制周期</label>
-                    <select
-                      value={editRuleData.limitPeriod || 'month'}
-                      onChange={e => setEditRuleData({ ...editRuleData, limitPeriod: e.target.value as any })}
-                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                    >
-                      <option value="month">次 / 每月 (如 1次/月, 5次/月)</option>
-                      <option value="day">次 / 每日 (如 1次/日, 2次/日)</option>
-                      <option value="week">次 / 每周 (如 1次/周)</option>
-                      <option value="total">次 / 活动期总计</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-2xs text-slate-600 dark:text-slate-400">已使用次数</label>
-                      <button
-                        type="button"
-                        onClick={() => setEditRuleData({ ...editRuleData, usedCount: 0 })}
-                        className="text-3xs text-indigo-600 dark:text-indigo-400 hover:underline"
-                      >
-                        清零
-                      </button>
-                    </div>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      周限额 (次/周)
+                    </label>
                     <input
                       type="number"
                       min="0"
-                      value={editRuleData.usedCount ?? 0}
-                      onChange={e => setEditRuleData({ ...editRuleData, usedCount: parseInt(e.target.value, 10) || 0 })}
-                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      value={editRuleData.weeklyLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setEditRuleData({ ...editRuleData, weeklyLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      月限额 (次/月)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editRuleData.monthlyLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setEditRuleData({ ...editRuleData, monthlyLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      活动总限额 (次)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editRuleData.totalLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setEditRuleData({ ...editRuleData, totalLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     />
                   </div>
                 </div>
+
+                {/* Live ledger stats display */}
+                {(() => {
+                  const usage = calculateRuleUsage(editRuleData, state.feedback, getLocalDateString());
+                  return (
+                    <div className="p-2 rounded-lg bg-amber-100/50 dark:bg-amber-950/40 text-3xs text-amber-900 dark:text-amber-200 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="font-semibold">实时流水核算：</span>
+                      <span>今日已用 <strong className="font-mono">{usage.dailyUsage}</strong> 次</span>
+                      <span>本周已用 <strong className="font-mono">{usage.weeklyUsage}</strong> 次</span>
+                      <span>本月已用 <strong className="font-mono">{usage.monthlyUsage}</strong> 次</span>
+                      <span>总计已用 <strong className="font-mono">{usage.totalUsage}</strong> 次</span>
+                      <span className="text-slate-400">（按本地自然日/月动态核算，次日 00:00 自动重置今日额度）</span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Date Validity */}
@@ -1089,71 +1203,132 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Usage Limit: 1次/月, 5次/月, 1次/日 etc. */}
-              <div className="p-3 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl space-y-2 border border-amber-200/60 dark:border-amber-900/40">
-                <div className="flex items-center justify-between">
+              {/* Parallel Usage Limit Section: 1次/日 与 15次/月 并行限制 */}
+              <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/20 rounded-xl space-y-2.5 border border-amber-200/70 dark:border-amber-900/50">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                   <label className="text-slate-800 dark:text-slate-200 font-semibold flex items-center gap-1.5">
                     <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    <span>限额与频次限制</span>
+                    <span>频次与限额并行控制</span>
                   </label>
-                  <span className="text-3xs text-slate-400">支持 1次/月、5次/月、1次/日等</span>
+                  <span className="text-3xs text-amber-700 dark:text-amber-400 font-medium">
+                    支持「1次/日」与「15次/月」同时并行生效
+                  </span>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1">
-                  {[
-                    { label: '1次/月', limit: 1, period: 'month' },
-                    { label: '5次/月', limit: 5, period: 'month' },
-                    { label: '1次/日', limit: 1, period: 'day' },
-                    { label: '2次/日', limit: 2, period: 'day' },
-                    { label: '1次/周', limit: 1, period: 'week' },
-                    { label: '不限次', limit: null, period: 'month' }
-                  ].map(preset => {
-                    const isActive = newRuleData.limit === preset.limit && (preset.limit === null || newRuleData.limitPeriod === preset.period);
-                    return (
-                      <button
-                        key={preset.label}
-                        type="button"
-                        onClick={() => setNewRuleData({
-                          ...newRuleData,
-                          limit: preset.limit,
-                          limitPeriod: preset.period as any
-                        })}
-                        className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
-                          isActive
-                            ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
-                            : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
-                        }`}
-                      >
-                        {preset.label}
-                      </button>
-                    );
-                  })}
+                {/* Quick Presets */}
+                <div className="space-y-1">
+                  <div className="text-3xs text-slate-500 font-medium">快捷预设模板：</div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {[
+                      { label: '1次/日 · 15次/月 (通勤推荐)', d: 1, w: null, m: 15, t: null },
+                      { label: '1次/日 · 5次/月', d: 1, w: null, m: 5, t: null },
+                      { label: '1次/日 · 30次/月', d: 1, w: null, m: 30, t: null },
+                      { label: '1次/周 · 4次/月', d: null, w: 1, m: 4, t: null },
+                      { label: '1次/日', d: 1, w: null, m: null, t: null },
+                      { label: '1次/周', d: null, w: 1, m: null, t: null },
+                      { label: '5次/月', d: null, w: null, m: 5, t: null },
+                      { label: '1次/月', d: null, w: null, m: 1, t: null },
+                      { label: '不限频次', d: null, w: null, m: null, t: null }
+                    ].map(preset => {
+                      const isActive =
+                        newRuleData.dailyLimit === preset.d &&
+                        newRuleData.weeklyLimit === preset.w &&
+                        newRuleData.monthlyLimit === preset.m &&
+                        newRuleData.totalLimit === preset.t;
+                      return (
+                        <button
+                          key={preset.label}
+                          type="button"
+                          onClick={() => setNewRuleData({
+                            ...newRuleData,
+                            dailyLimit: preset.d,
+                            weeklyLimit: preset.w,
+                            monthlyLimit: preset.m,
+                            totalLimit: preset.t,
+                            limit: preset.d || preset.m || preset.w || preset.t || null,
+                            limitPeriod: preset.d ? 'day' : preset.w ? 'week' : preset.m ? 'month' : 'total'
+                          })}
+                          className={`px-2.5 py-1 text-2xs rounded-lg font-medium transition-colors ${
+                            isActive
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-2xs'
+                              : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100'
+                          }`}
+                        >
+                          {preset.label}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                {/* Parallel Limit Inputs */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
                   <div>
-                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制次数</label>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      日限额 (次/日)
+                    </label>
                     <input
                       type="number"
                       min="0"
-                      value={newRuleData.limit ?? ''}
-                      onChange={e => setNewRuleData({ ...newRuleData, limit: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                      value={newRuleData.dailyLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setNewRuleData({ ...newRuleData, dailyLimit: val });
+                      }}
                       placeholder="留空为不限"
-                      className="w-full px-2.5 py-1.5 font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">限制周期</label>
-                    <select
-                      value={newRuleData.limitPeriod || 'month'}
-                      onChange={e => setNewRuleData({ ...newRuleData, limitPeriod: e.target.value as any })}
-                      className="w-full px-2 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                    >
-                      <option value="month">次 / 每月 (如 1次/月, 5次/月)</option>
-                      <option value="day">次 / 每日 (如 1次/日, 2次/日)</option>
-                      <option value="week">次 / 每周 (如 1次/周)</option>
-                      <option value="total">次 / 活动期总计</option>
-                    </select>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      周限额 (次/周)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRuleData.weeklyLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setNewRuleData({ ...newRuleData, weeklyLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      月限额 (次/月)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRuleData.monthlyLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setNewRuleData({ ...newRuleData, monthlyLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-2xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      活动总限额 (次)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={newRuleData.totalLimit ?? ''}
+                      onChange={e => {
+                        const val = e.target.value === '' ? null : parseInt(e.target.value, 10);
+                        setNewRuleData({ ...newRuleData, totalLimit: val });
+                      }}
+                      placeholder="留空为不限"
+                      className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
                   </div>
                 </div>
               </div>

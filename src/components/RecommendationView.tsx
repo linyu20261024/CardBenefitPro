@@ -5,7 +5,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { evaluateRecommendations, formatCurrency, formatBigNumber } from '../utils/engine';
+import {
+  evaluateRecommendations,
+  formatCurrency,
+  formatBigNumber,
+  getLocalDateString,
+  getNowLocalDateTimeString
+} from '../utils/engine';
 import { RecommendationResult } from '../types/cardBenefit';
 import {
   Sparkles,
@@ -107,13 +113,15 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
         scene: selectedScene,
         channel: selectedChannel,
         bank: selectedBank,
-        currentTime: customTime
+        currentTime: customTime,
+        currentDate: getLocalDateString()
       },
       state.rules,
       state.activities,
-      state.rewardActivities
+      state.rewardActivities,
+      state.feedback
     );
-  }, [parsedAmount, selectedScene, selectedChannel, selectedBank, customTime, state]);
+  }, [parsedAmount, selectedScene, selectedChannel, selectedBank, customTime, state.rules, state.activities, state.rewardActivities, state.feedback]);
 
   const eligibleRecommendations = useMemo(() => {
     return recommendations.filter(r => r.isEligible);
@@ -155,7 +163,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       actual: actualSavings,
       confirmed: true,
       result: actualSavings >= result.instantSavings ? 'confirmed' : 'discrepancy',
-      when: new Date().toISOString().slice(0, 16),
+      when: getNowLocalDateTimeString(),
       note: note || result.notes || '',
       contributedActivities: result.triggeredComboDetails
     });

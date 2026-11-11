@@ -9,7 +9,8 @@ import {
   RewardComboActivity,
   RecommendationResult,
   BankAssetActivity,
-  BankAssetEntry
+  BankAssetEntry,
+  FeedbackRecord
 } from '../types/cardBenefit';
 
 export interface RecommendationQuery {
@@ -27,13 +28,129 @@ export const POINTS_RMB_RATE = 15 / 10000;
 // Conservative value for a lottery ticket chance: 3 RMB
 export const LOTTERY_RMB_VALUE = 3.0;
 
+/**
+ * Returns local date in YYYY-MM-DD format (using local device timezone, avoiding UTC shifts)
+ */
+export function getLocalDateString(d: Date = new Date()): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Returns local date time in YYYY-MM-DD HH:mm format
+ */
+export function getNowLocalDateTimeString(d: Date = new Date()): string {
+  const dateStr = getLocalDateString(d);
+  const hour = String(d.getHours()).padStart(2, '0');
+  const minute = String(d.getMinutes()).padStart(2, '0');
+  return `${dateStr} ${hour}:${minute}`;
+}
+
+/**
+ * Returns the start (Monday) and end (Sunday) dates of the ISO week containing dateStr (YYYY-MM-DD)
+ */
+export function getWeekStartAndEnd(dateStr: string): { start: string; end: string } {
+  const parts = dateStr.split('-').map(Number);
+  const date = new Date(parts[0], parts[1] - 1, parts[2]);
+  const dayOfWeek = date.getDay(); // 0 is Sunday, 1 is Monday...
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(date);
+  monday.setDate(date.getDate() + diffToMonday);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return {
+    start: getLocalDateString(monday),
+    end: getLocalDateString(sunday)
+  };
+}
+
+export interface RulePeriodUsage {
+  dailyUsage: number;
+  weeklyUsage: number;
+  monthlyUsage: number;
+  totalUsage: number;
+}
+
+/**
+ * Safely extracts YYYY-MM-DD from any date string
+ */
+export function extractDateStr(whenStr?: string): string | null {
+  if (!whenStr) return null;
+  const match = whenStr.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return null;
+}
+
+/**
+ * Dynamically calculates how many times a rule has been used in current day, week, month, and total
+ * based on ledger records and avoiding timezone shifts
+ */
+export function calculateRuleUsage(
+  rule: InstantRule,
+  feedbackRecords: FeedbackRecord[] = [],
+  currentDateStr: string = getLocalDateString()
+): RulePeriodUsage {
+  const normRuleName = (rule.name || '').trim().toLowerCase();
+  const matchingRecords = feedbackRecords.filter(f => {
+    if (f.ruleId && f.ruleId === rule.id) return true;
+    if (normRuleName && f.ruleName && f.ruleName.trim().toLowerCase() === normRuleName) return true;
+    return false;
+  });
+
+  const currentMonthStr = currentDateStr.slice(0, 7);
+  const { start: weekStart, end: weekEnd } = getWeekStartAndEnd(currentDateStr);
+
+  let dailyUsage = 0;
+  let weeklyUsage = 0;
+  let monthlyUsage = 0;
+  let totalUsage = 0;
+
+  for (const f of matchingRecords) {
+    totalUsage++;
+    const recDate = extractDateStr(f.when);
+    if (!recDate) continue;
+
+    if (recDate === currentDateStr) {
+      dailyUsage++;
+    }
+    if (recDate >= weekStart && recDate <= weekEnd) {
+      weeklyUsage++;
+    }
+    if (recDate.slice(0, 7) === currentMonthStr) {
+      monthlyUsage++;
+    }
+  }
+
+  return {
+    dailyUsage,
+    weeklyUsage,
+    monthlyUsage,
+    totalUsage
+  };
+}
+
 export function evaluateRecommendations(
   query: RecommendationQuery,
   rules: InstantRule[],
   activities: MilestoneActivity[],
-  rewardActivities: RewardComboActivity[]
+  rewardActivities: RewardComboActivity[],
+  feedbackRecords: FeedbackRecord[] = []
 ): RecommendationResult[] {
-  const { amount, scene, channel, bank, currentTime = '08:30', currentDate = new Date().toISOString().slice(0, 10) } = query;
+  const {
+    amount,
+    scene,
+    channel,
+    bank,
+    currentTime = '08:30',
+    currentDate = getLocalDateString()
+  } = query;
 
   if (amount <= 0) return [];
 
@@ -100,13 +217,34 @@ export function evaluateRecommendations(
       ineligibleReasons.push(`活动已结束 (截止于 ${rule.dateEnd})`);
     }
 
-    // Usage limit check
-    let underLimit = true;
-    const periodLabel = rule.limitPeriod === 'day' ? '日' : rule.limitPeriod === 'week' ? '周' : rule.limitPeriod === 'total' ? '活动期' : '月';
-    if (rule.limit && (rule.usedCount || 0) >= rule.limit) {
-      underLimit = false;
+    // Parallel usage limits check (supporting parallel: dailyLimit, weeklyLimit, monthlyLimit, totalLimit, and legacy limit)
+    const dailyLimit = rule.dailyLimit ?? (rule.limitPeriod === 'day' ? rule.limit : null);
+    const weeklyLimit = rule.weeklyLimit ?? (rule.limitPeriod === 'week' ? rule.limit : null);
+    const monthlyLimit = rule.monthlyLimit ?? (rule.limitPeriod === 'month' ? rule.limit : null);
+    const totalLimit = rule.totalLimit ?? (rule.limitPeriod === 'total' ? rule.limit : null);
+
+    // Calculate dynamic usage from feedback records based on local date
+    const usage = calculateRuleUsage(rule, feedbackRecords, currentDate);
+
+    // Check each configured parallel limit
+    if (dailyLimit && dailyLimit > 0 && usage.dailyUsage >= dailyLimit) {
       isEligible = false;
-      ineligibleReasons.push(`本${periodLabel}优惠次数已达上限 (${rule.usedCount || 0}/${rule.limit}次)`);
+      ineligibleReasons.push(`本日优惠次数已达上限 (${usage.dailyUsage}/${dailyLimit}次)`);
+    }
+
+    if (weeklyLimit && weeklyLimit > 0 && usage.weeklyUsage >= weeklyLimit) {
+      isEligible = false;
+      ineligibleReasons.push(`本周优惠次数已达上限 (${usage.weeklyUsage}/${weeklyLimit}次)`);
+    }
+
+    if (monthlyLimit && monthlyLimit > 0 && usage.monthlyUsage >= monthlyLimit) {
+      isEligible = false;
+      ineligibleReasons.push(`本月优惠次数已达上限 (${usage.monthlyUsage}/${monthlyLimit}次)`);
+    }
+
+    if (totalLimit && totalLimit > 0 && usage.totalUsage >= totalLimit) {
+      isEligible = false;
+      ineligibleReasons.push(`活动总优惠次数已达上限 (${usage.totalUsage}/${totalLimit}次)`);
     }
 
     // Calculate benefits
@@ -124,9 +262,21 @@ export function evaluateRecommendations(
     if (rule.min) {
       qualifications.push(`满¥${rule.min}起用${meetsMin ? '' : ' (未达标)'}`);
     }
-    if (rule.limit) {
-      const remaining = Math.max(0, rule.limit - (rule.usedCount || 0));
-      qualifications.push(`限额 ${rule.limit}次/${periodLabel} (余${remaining}次)`);
+    if (dailyLimit && dailyLimit > 0) {
+      const rem = Math.max(0, dailyLimit - usage.dailyUsage);
+      qualifications.push(`限额 ${dailyLimit}次/日 (今日余${rem}次)`);
+    }
+    if (weeklyLimit && weeklyLimit > 0) {
+      const rem = Math.max(0, weeklyLimit - usage.weeklyUsage);
+      qualifications.push(`限额 ${weeklyLimit}次/周 (本周余${rem}次)`);
+    }
+    if (monthlyLimit && monthlyLimit > 0) {
+      const rem = Math.max(0, monthlyLimit - usage.monthlyUsage);
+      qualifications.push(`限额 ${monthlyLimit}次/月 (本月余${rem}次)`);
+    }
+    if (totalLimit && totalLimit > 0) {
+      const rem = Math.max(0, totalLimit - usage.totalUsage);
+      qualifications.push(`总限额 ${totalLimit}次 (余${rem}次)`);
     }
 
     switch (rule.type) {

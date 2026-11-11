@@ -305,7 +305,11 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const mergedRules = (targetState.rules || []).map((r: any) => ({
         ...r,
         bank: r.bank || inferBankName(r.name || ''),
-        enabled: r.enabled !== false
+        enabled: r.enabled !== false,
+        dailyLimit: r.dailyLimit !== undefined ? r.dailyLimit : (r.limitPeriod === 'day' ? r.limit : null),
+        weeklyLimit: r.weeklyLimit !== undefined ? r.weeklyLimit : (r.limitPeriod === 'week' ? r.limit : null),
+        monthlyLimit: r.monthlyLimit !== undefined ? r.monthlyLimit : (r.limitPeriod === 'month' ? r.limit : null),
+        totalLimit: r.totalLimit !== undefined ? r.totalLimit : (r.limitPeriod === 'total' ? r.limit : null)
       }));
 
       const mergedActivities = (targetState.activities || []).map((a: any) => ({

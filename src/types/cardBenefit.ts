@@ -64,9 +64,13 @@ export interface InstantRule {
   dateEnd: string;      // YYYY-MM-DD
   start: string;        // HH:mm
   end: string;          // HH:mm
-  limit: number | null; // 限制次数/月或/日
+  limit: number | null; // 兼容单项限制次数
   limitPeriod?: 'day' | 'week' | 'month' | 'total';
-  usedCount?: number;   // 已使用次数
+  dailyLimit?: number | null;   // 日限额 (如 1次/日)
+  weeklyLimit?: number | null;  // 周限额 (如 1次/周)
+  monthlyLimit?: number | null; // 月限额 (如 15次/月)
+  totalLimit?: number | null;   // 活动期内总计限制
+  usedCount?: number;   // 历史已使用次数
   notes: string;
   enabled?: boolean;
 }
