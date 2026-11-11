@@ -19,7 +19,9 @@ import {
   AlertCircle,
   Calculator,
   ArrowRight,
-  Sliders
+  Sliders,
+  Search,
+  X
 } from 'lucide-react';
 
 export const AssetMilestonesView: React.FC = () => {
@@ -33,16 +35,34 @@ export const AssetMilestonesView: React.FC = () => {
     deleteBankAssetActivity
   } = useCardBenefit();
 
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredActivities = useMemo(() => {
+    if (!searchQuery.trim()) return state.bankAssetActivities;
+    const q = searchQuery.trim().toLowerCase();
+    return state.bankAssetActivities.filter(act => {
+      const matchBank = act.bank.toLowerCase().includes(q);
+      const matchMonth = act.month.toLowerCase().includes(q);
+      const matchScope = (act.scope || '').toLowerCase().includes(q);
+      const matchNotes = (act.notes || '').toLowerCase().includes(q);
+      const matchTiers = act.tiers?.some(t =>
+        t.label.toLowerCase().includes(q) || String(t.threshold).includes(q)
+      );
+      return matchBank || matchMonth || matchScope || matchNotes || matchTiers;
+    });
+  }, [state.bankAssetActivities, searchQuery]);
+
   const [selectedActivityId, setSelectedActivityId] = useState<string>(
     state.bankAssetActivities[0]?.id || ''
   );
 
   const selectedActivity = useMemo(() => {
+    const list = filteredActivities.length > 0 ? filteredActivities : state.bankAssetActivities;
     return (
-      state.bankAssetActivities.find(a => a.id === selectedActivityId) ||
-      state.bankAssetActivities[0]
+      list.find(a => a.id === selectedActivityId) ||
+      list[0]
     );
-  }, [state.bankAssetActivities, selectedActivityId]);
+  }, [filteredActivities, state.bankAssetActivities, selectedActivityId]);
 
   const metrics = useMemo(() => {
     if (!selectedActivity) return null;
@@ -150,33 +170,59 @@ export const AssetMilestonesView: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {/* Segmented Bank Switcher */}
-          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-x-auto scrollbar-none">
-            {state.bankAssetActivities.map(act => (
+        <button
+          onClick={() => setIsNewAssetModalOpen(true)}
+          className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shrink-0 shadow-xs self-start sm:self-auto"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>新增银行资产活动</span>
+        </button>
+      </div>
+
+      {/* Search Bar & Bank Selector Toolbar */}
+      {state.bankAssetActivities.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="搜索银行名称、月份(如 2026-11)、资产范围或立减金奖励..."
+              className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+            />
+            {searchQuery && (
               <button
-                key={act.id}
-                onClick={() => setSelectedActivityId(act.id)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
-                  selectedActivity?.id === act.id
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                }`}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
               >
-                {act.bank}
+                <X className="w-3.5 h-3.5" />
               </button>
-            ))}
+            )}
           </div>
 
-          <button
-            onClick={() => setIsNewAssetModalOpen(true)}
-            className="px-3 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1 shrink-0 shadow-xs"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>新增银行资产活动</span>
-          </button>
+          <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl overflow-x-auto scrollbar-none shrink-0">
+            {filteredActivities.length === 0 ? (
+              <span className="text-2xs text-slate-400 px-3 py-1">未匹配到银行活动</span>
+            ) : (
+              filteredActivities.map(act => (
+                <button
+                  key={act.id}
+                  onClick={() => setSelectedActivityId(act.id)}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap flex items-center gap-1 ${
+                    selectedActivity?.id === act.id
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <span>{act.bank}</span>
+                  <span className="text-3xs opacity-60 font-mono">({act.month.slice(5)}月)</span>
+                </button>
+              ))
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {state.bankAssetActivities.length === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center space-y-4">

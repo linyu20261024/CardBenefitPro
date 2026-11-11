@@ -25,7 +25,9 @@ import {
   Tag,
   CreditCard,
   ArrowRight,
-  Sliders
+  Sliders,
+  Search,
+  X
 } from 'lucide-react';
 
 export const ComboActivitiesView: React.FC = () => {
@@ -39,7 +41,9 @@ export const ComboActivitiesView: React.FC = () => {
     deleteRewardActivity
   } = useCardBenefit();
 
-  // Filter state
+  // Search & Filter state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [bankFilter, setBankFilter] = useState('all');
   const [activeCategory, setActiveCategory] = useState<'all' | 'milestones' | 'combos' | 'quickpay'>('all');
 
   // Quick record modal
@@ -87,10 +91,29 @@ export const ComboActivitiesView: React.FC = () => {
     return base + ledgerContribution;
   };
 
+  // Unique banks list
+  const availableBanks = useMemo(() => {
+    const banks = new Set<string>();
+    state.activities.forEach(a => { if (a.bank) banks.add(a.bank); });
+    state.rewardActivities.forEach(a => { if (a.bank) banks.add(a.bank); });
+    return ['all', ...Array.from(banks)];
+  }, [state.activities, state.rewardActivities]);
+
   // Filtered milestone activities
   const filteredMilestones = useMemo(() => {
     if (activeCategory === 'combos') return [];
     return state.activities.filter(act => {
+      if (bankFilter !== 'all' && act.bank !== bankFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = act.name.toLowerCase().includes(q);
+        const matchNotes = (act.notes || '').toLowerCase().includes(q);
+        const matchBank = (act.bank || '').toLowerCase().includes(q);
+        const matchTiers = act.tiers?.some(t =>
+          t.rewardName.toLowerCase().includes(q) || String(t.target).includes(q)
+        );
+        if (!matchName && !matchNotes && !matchBank && !matchTiers) return false;
+      }
       if (activeCategory === 'quickpay') {
         return (
           act.channel === 'alipay' ||
@@ -100,20 +123,34 @@ export const ComboActivitiesView: React.FC = () => {
       }
       return true;
     });
-  }, [state.activities, activeCategory]);
+  }, [state.activities, activeCategory, bankFilter, searchQuery]);
 
   // Filtered combo activities
   const filteredCombos = useMemo(() => {
     if (activeCategory === 'milestones') return [];
-    if (activeCategory === 'quickpay') {
-      return state.rewardActivities.filter(a =>
-        a.channels?.includes('alipay') || a.name.includes('快捷支付')
-      );
-    }
-    return state.rewardActivities;
-  }, [state.rewardActivities, activeCategory]);
+    return state.rewardActivities.filter(a => {
+      if (bankFilter !== 'all' && a.bank !== bankFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const matchName = a.name.toLowerCase().includes(q);
+        const matchNotes = (a.notes || '').toLowerCase().includes(q);
+        const matchBank = (a.bank || '').toLowerCase().includes(q);
+        const matchRules = a.rules?.some(r =>
+          r.name.toLowerCase().includes(q) || (r.notes || '').toLowerCase().includes(q)
+        );
+        if (!matchName && !matchNotes && !matchBank && !matchRules) return false;
+      }
+      if (activeCategory === 'quickpay') {
+        return (
+          a.channels?.includes('alipay') || a.name.includes('快捷支付')
+        );
+      }
+      return true;
+    });
+  }, [state.rewardActivities, activeCategory, bankFilter, searchQuery]);
 
   const totalActivitiesCount = state.activities.length + state.rewardActivities.length;
+  const filteredCount = filteredMilestones.length + filteredCombos.length;
 
   const handleQuickSpendSubmit = () => {
     if (!quickSpendModal) return;
@@ -327,6 +364,53 @@ export const ComboActivitiesView: React.FC = () => {
         </button>
       </div>
 
+      {/* Search & Bank Filter Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+        <div className="relative flex-1">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="搜索活动名称、银行、消费门槛或奖励内容..."
+            className="w-full pl-9 pr-8 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-hidden focus:ring-1 focus:ring-indigo-500"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2">
+          <select
+            value={bankFilter}
+            onChange={e => setBankFilter(e.target.value)}
+            className="px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-900 dark:text-white font-medium focus:outline-hidden"
+          >
+            <option value="all">全部发卡银行 ({availableBanks.length > 1 ? availableBanks.length - 1 : 0}家)</option>
+            {availableBanks.filter(b => b !== 'all').map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+
+          {(searchQuery || bankFilter !== 'all') && (
+            <button
+              onClick={() => {
+                setSearchQuery('');
+                setBankFilter('all');
+              }}
+              className="px-2.5 py-2 text-xs text-indigo-600 dark:text-indigo-400 hover:underline shrink-0 font-medium"
+            >
+              重置筛选
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Empty State */}
       {totalActivitiesCount === 0 ? (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 sm:p-12 text-center space-y-4">
@@ -355,6 +439,23 @@ export const ComboActivitiesView: React.FC = () => {
               + 满5000/8000抽奖活动
             </button>
           </div>
+        </div>
+      ) : filteredCount === 0 ? (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center space-y-3">
+          <Search className="w-8 h-8 text-slate-400 mx-auto" />
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-white">未找到匹配的达标活动</h3>
+          <p className="text-xs text-slate-400">
+            没有符合当前搜索词「{searchQuery}」或所选银行「{bankFilter}」的活动
+          </p>
+          <button
+            onClick={() => {
+              setSearchQuery('');
+              setBankFilter('all');
+            }}
+            className="px-3 py-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
+          >
+            清除搜索条件
+          </button>
         </div>
       ) : (
         <div className="space-y-6">

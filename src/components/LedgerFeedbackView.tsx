@@ -19,7 +19,8 @@ import {
   ToggleRight,
   Edit2,
   Clock,
-  AlertCircle
+  AlertCircle,
+  Calendar
 } from 'lucide-react';
 
 export const LedgerFeedbackView: React.FC = () => {
@@ -1328,6 +1329,82 @@ export const LedgerFeedbackView: React.FC = () => {
                       }}
                       placeholder="留空为不限"
                       className="w-full px-2.5 py-1.5 font-mono text-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Date Validity */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>活动有效起止日期</span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        const month = today.slice(0, 7);
+                        setNewRuleData({
+                          ...newRuleData,
+                          dateStart: `${month}-01`,
+                          dateEnd: `${month}-30`
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      当月有效
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        const year = today.slice(0, 4);
+                        setNewRuleData({
+                          ...newRuleData,
+                          dateStart: today,
+                          dateEnd: `${year}-12-31`
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      至年底
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        setNewRuleData({
+                          ...newRuleData,
+                          dateStart: today,
+                          dateEnd: '2027-12-31'
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      长期有效
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">开始日期</label>
+                    <input
+                      type="date"
+                      value={newRuleData.dateStart || ''}
+                      onChange={e => setNewRuleData({ ...newRuleData, dateStart: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">截止日期</label>
+                    <input
+                      type="date"
+                      value={newRuleData.dateEnd || ''}
+                      onChange={e => setNewRuleData({ ...newRuleData, dateEnd: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
                     />
                   </div>
                 </div>

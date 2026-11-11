@@ -205,16 +205,18 @@ export function evaluateRecommendations(
       ineligibleReasons.push(`未达门槛金额 (需满 ¥${rule.min}，还差 ¥${diff})`);
     }
 
-    // Date range check
-    let inDateRange = true;
-    if (rule.dateStart && currentDate < rule.dateStart) {
-      inDateRange = false;
-      isEligible = false;
-      ineligibleReasons.push(`活动尚未开始 (自 ${rule.dateStart} 起)`);
-    } else if (rule.dateEnd && currentDate > rule.dateEnd) {
-      inDateRange = false;
-      isEligible = false;
-      ineligibleReasons.push(`活动已结束 (截止于 ${rule.dateEnd})`);
+    // Date range check: completely exclude expired or unstarted rules from query recommendations
+    const curDateStr = extractDateStr(currentDate) || currentDate;
+    const ruleEndDate = extractDateStr(rule.dateEnd);
+    const ruleStartDate = extractDateStr(rule.dateStart);
+
+    if (ruleEndDate && curDateStr > ruleEndDate) {
+      // Activity has already ended; do not include in results or ineligible
+      continue;
+    }
+    if (ruleStartDate && curDateStr < ruleStartDate) {
+      // Activity has not started yet
+      continue;
     }
 
     // Parallel usage limits check (supporting parallel: dailyLimit, weeklyLimit, monthlyLimit, totalLimit, and legacy limit)
@@ -374,7 +376,14 @@ export function evaluateRecommendations(
   }
 
   // 2. Evaluate Milestone Activities (Tiered activities like 交行达标5000送15 / 支付宝快捷支付)
+  const curDateStr = extractDateStr(currentDate) || currentDate;
   for (const act of activities) {
+    // Exclude expired milestone activities
+    const actEndDate = extractDateStr(act.end);
+    const actStartDate = extractDateStr(act.start);
+    if (actEndDate && curDateStr > actEndDate) continue;
+    if (actStartDate && curDateStr < actStartDate) continue;
+
     if (bank && bank !== 'all' && act.bank !== bank) continue;
     if (act.channel !== 'any' && channel !== 'any' && act.channel !== channel) continue;
 
