@@ -64,21 +64,6 @@ const CHANNELS = [
   { id: 'digital_cny', label: '数字人民币' }
 ];
 
-const BANKS = [
-  'all',
-  '交通银行',
-  '建设银行',
-  '农业银行',
-  '兴业银行',
-  '光大银行',
-  '工商银行',
-  '广发银行',
-  '华夏银行',
-  '邮储银行',
-  '平安银行',
-  '支付宝'
-];
-
 interface RecommendationViewProps {
   onOpenSyncModal?: () => void;
 }
@@ -89,7 +74,15 @@ function getNowTimeString(): string {
 }
 
 export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSyncModal }) => {
-  const { state, addFeedbackRecord, loadSampleData } = useCardBenefit();
+  const { state, addFeedbackRecord } = useCardBenefit();
+
+  const availableBanks = useMemo(() => {
+    const banks = new Set<string>();
+    state.rules.forEach(r => { if (r.bank) banks.add(r.bank); });
+    state.activities.forEach(a => { if (a.bank) banks.add(a.bank); });
+    state.rewardActivities.forEach(ra => { if (ra.bank) banks.add(ra.bank); });
+    return ['all', ...Array.from(banks)];
+  }, [state.rules, state.activities, state.rewardActivities]);
 
   const [amountInput, setAmountInput] = useState<string>('5');
   const [selectedScene, setSelectedScene] = useState<string>('subway');
@@ -100,6 +93,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
     result: RecommendationResult;
     actualAmount: number;
     actualSavings: number;
+    when: string;
     note: string;
   } | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
@@ -139,17 +133,19 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
     : eligibleRecommendations;
 
   const handleApplyRecommendation = (rec: RecommendationResult) => {
+    const defaultWhen = customTime ? `${getLocalDateString()} ${customTime}` : getNowLocalDateTimeString();
     setRecordModalData({
       result: rec,
       actualAmount: parsedAmount,
       actualSavings: rec.instantSavings > 0 ? rec.instantSavings : rec.cashbackReward,
+      when: defaultWhen,
       note: rec.triggersCombo ? rec.triggeredComboDetails.join('; ') : ''
     });
   };
 
   const handleConfirmRecord = () => {
     if (!recordModalData) return;
-    const { result, actualAmount, actualSavings, note } = recordModalData;
+    const { result, actualAmount, actualSavings, when, note } = recordModalData;
 
     addFeedbackRecord({
       ruleId: result.id,
@@ -163,9 +159,9 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       actual: actualSavings,
       confirmed: true,
       result: actualSavings >= result.instantSavings ? 'confirmed' : 'discrepancy',
-      when: getNowLocalDateTimeString(),
+      when: when.replace('T', ' ') || getNowLocalDateTimeString(),
       note: note || result.notes || '',
-      contributedActivities: result.triggeredComboDetails
+      contributedActivities: result.triggeredActivityNames || []
     });
 
     setRecordModalData(null);
@@ -305,7 +301,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
             <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">机构:</span>
-            {BANKS.slice(0, 8).map(b => (
+            {availableBanks.map(b => (
               <button
                 key={b}
                 type="button"
@@ -335,7 +331,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
           <div className="space-y-1">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">卡包当前为空 (纯净本地模式)</h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-              当前尚未导入任何用卡规则，所有数据仅保存在您本地设备中。请点击下方按钮导入您的用卡推荐备份 JSON 文件。
+              当前尚未导入任何用卡规则，所有数据仅保存在您本地设备中。请导入您的 JSON 备份，或前往「优惠记录与规则」手动添加规则。
             </p>
           </div>
           <div className="flex flex-wrap items-center justify-center gap-2.5 pt-2">
@@ -345,12 +341,6 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
             >
               <Download className="w-4 h-4" />
               <span>导入我的 JSON 备份</span>
-            </button>
-            <button
-              onClick={loadSampleData}
-              className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              <span>加载示例演示数据</span>
             </button>
           </div>
         </div>
@@ -728,6 +718,23 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     })
                   }
                   className="w-full px-3 py-2 text-sm font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                  消费时间
+                </label>
+                <input
+                  type="datetime-local"
+                  value={recordModalData.when.replace(' ', 'T').slice(0, 16)}
+                  onChange={e =>
+                    setRecordModalData({
+                      ...recordModalData,
+                      when: e.target.value.replace('T', ' ')
+                    })
+                  }
+                  className="w-full px-3 py-2 text-xs font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                 />
               </div>
 

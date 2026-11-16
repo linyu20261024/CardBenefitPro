@@ -5,26 +5,47 @@
 
 import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { formatCurrency, formatBigNumber } from '../utils/engine';
+import {
+  formatCurrency,
+  getLocalDateString,
+  evaluateRecommendations
+} from '../utils/engine';
 import {
   TrendingUp,
-  CreditCard,
   Wallet,
   Landmark,
   CheckCircle2,
   Calendar,
   Layers,
-  ArrowUpRight,
-  Filter,
-  Sparkles
+  Filter
 } from 'lucide-react';
 
 export const DashboardView: React.FC = () => {
   const { state, totalSaved, monthlySaved, totalCashback, pendingRewardValue, activeRulesCount } = useCardBenefit();
 
   const [selectedBankFilter, setSelectedBankFilter] = useState<string>('all');
-  const [selectedSceneFilter, setSelectedSceneFilter] = useState<string>('all');
-  const [selectedTypeFilter, setSelectedTypeFilter] = useState<string>('all');
+  const [selectedSceneFilter] = useState<string>('all');
+
+  const todayStr = getLocalDateString();
+  const currentYear = todayStr.slice(0, 4);
+  const currentMonthNum = parseInt(todayStr.slice(5, 7), 10);
+
+  // Available banks for filter
+  const feedbackBanks = useMemo(() => {
+    const banks = new Set<string>();
+    state.feedback.forEach(f => { if (f.bank) banks.add(f.bank); });
+    return Array.from(banks);
+  }, [state.feedback]);
+
+  const activeAssetBanksSummary = useMemo(() => {
+    if (state.bankAssetActivities.length === 0) return '暂无资产活动';
+    return Array.from(new Set(state.bankAssetActivities.map(a => a.bank))).join(' / ');
+  }, [state.bankAssetActivities]);
+
+  const activeCashbackBanksSummary = useMemo(() => {
+    if (state.activities.length === 0) return '暂无达标活动';
+    return Array.from(new Set(state.activities.map(a => a.bank || '合作银行'))).slice(0, 3).join(' / ');
+  }, [state.activities]);
 
   // Filter feedback records
   const filteredFeedback = useMemo(() => {
@@ -38,14 +59,12 @@ export const DashboardView: React.FC = () => {
   // Aggregate savings by bank
   const bankStats = useMemo(() => {
     const map: Record<string, { saved: number; count: number; pending: number }> = {};
-    // From feedback
     state.feedback.forEach(f => {
       const bank = f.bank || '通用银行';
       if (!map[bank]) map[bank] = { saved: 0, count: 0, pending: 0 };
       map[bank].saved += f.actual || f.expected || 0;
       map[bank].count += 1;
     });
-    // From confirmed activities
     state.activities.forEach(act => {
       const bank = act.bank || '合作银行';
       if (!map[bank]) map[bank] = { saved: 0, count: 0, pending: 0 };
@@ -63,7 +82,7 @@ export const DashboardView: React.FC = () => {
       .sort((a, b) => b.total - a.total);
   }, [state.feedback, state.activities]);
 
-  // Benefit types distribution
+  // Benefit types distribution (derived from actual matching rules + activities + assets)
   const typeStats = useMemo(() => {
     let fixedTotal = 0;
     let rateTotal = 0;
@@ -74,12 +93,25 @@ export const DashboardView: React.FC = () => {
 
     state.feedback.forEach(f => {
       const amt = f.actual || f.expected || 0;
-      if (f.ruleName.includes('数币') || f.ruleName.includes('1.6') || f.ruleName.includes('0.99')) {
+      const matchedRule = state.rules.find(
+        r => r.id === f.ruleId || (f.ruleName && r.name === f.ruleName)
+      );
+      const rType = matchedRule?.type;
+
+      if (rType === 'fixed' || rType === 'threshold') {
         fixedTotal += amt;
-      } else if (f.ruleName.includes('五折') || f.ruleName.includes('5折')) {
+      } else if (rType === 'rate') {
         rateTotal += amt;
-      } else if (f.ruleName.includes('快捷支付')) {
+      } else if (rType === 'alipay_quickpay' || f.ruleName.includes('快捷支付')) {
         quickPayTotal += amt;
+      } else if (rType === 'points') {
+        pointsTotal += amt;
+      } else if (rType === 'cashback' || rType === 'lottery') {
+        cashbackTotal += amt;
+      } else if (f.ruleName.includes('折扣') || f.ruleName.includes('折')) {
+        rateTotal += amt;
+      } else if (f.ruleName.includes('立减')) {
+        fixedTotal += amt;
       } else {
         cashbackTotal += amt;
       }
@@ -89,7 +121,7 @@ export const DashboardView: React.FC = () => {
       act.tiers.forEach(t => {
         const val = t.actualReward || t.estimatedReward || 0;
         if (t.rewardStatus === 'confirmed' || t.rewardStatus === 'claimed') {
-          if (act.name.includes('快捷支付')) {
+          if (act.name.includes('快捷支付') || act.channel === 'alipay') {
             quickPayTotal += val;
           } else {
             cashbackTotal += val;
@@ -98,7 +130,6 @@ export const DashboardView: React.FC = () => {
       });
     });
 
-    // Asset rewards
     state.bankAssetActivities.forEach(act => {
       act.tiers.forEach(t => {
         if (t.achieved) {
@@ -107,15 +138,53 @@ export const DashboardView: React.FC = () => {
       });
     });
 
-    const sum = fixedTotal + rateTotal + cashbackTotal + pointsTotal + quickPayTotal + assetTotal || 1;
+    const totalVal = fixedTotal + rateTotal + cashbackTotal + pointsTotal + quickPayTotal + assetTotal;
+    const divisor = totalVal > 0 ? totalVal : 1;
     return [
-      { name: '资产达标收益', value: assetTotal, color: 'bg-emerald-500', pct: Math.round((assetTotal / sum) * 100) },
-      { name: '支付宝快捷支付', value: quickPayTotal, color: 'bg-indigo-500', pct: Math.round((quickPayTotal / sum) * 100) },
-      { name: '达标返现/刷卡金', value: cashbackTotal, color: 'bg-amber-500', pct: Math.round((cashbackTotal / sum) * 100) },
-      { name: '固定金额立减', value: fixedTotal, color: 'bg-sky-500', pct: Math.round((fixedTotal / sum) * 100) },
-      { name: '按比例优惠/折扣', value: rateTotal, color: 'bg-rose-500', pct: Math.round((rateTotal / sum) * 100) }
+      { name: '资产达标收益', value: assetTotal, color: 'bg-emerald-500', pct: totalVal > 0 ? Math.round((assetTotal / divisor) * 100) : 0 },
+      { name: '快捷支付满额', value: quickPayTotal, color: 'bg-indigo-500', pct: totalVal > 0 ? Math.round((quickPayTotal / divisor) * 100) : 0 },
+      { name: '达标返现/抽奖', value: cashbackTotal, color: 'bg-amber-500', pct: totalVal > 0 ? Math.round((cashbackTotal / divisor) * 100) : 0 },
+      { name: '固定/门槛立减', value: fixedTotal, color: 'bg-sky-500', pct: totalVal > 0 ? Math.round((fixedTotal / divisor) * 100) : 0 },
+      { name: '按比例折扣优惠', value: rateTotal, color: 'bg-rose-500', pct: totalVal > 0 ? Math.round((rateTotal / divisor) * 100) : 0 },
+      { name: '积分估值收益', value: pointsTotal, color: 'bg-purple-500', pct: totalVal > 0 ? Math.round((pointsTotal / divisor) * 100) : 0 }
     ];
-  }, [state.feedback, state.activities, state.bankAssetActivities]);
+  }, [state.feedback, state.rules, state.activities, state.bankAssetActivities]);
+
+  // Dynamic Scene Matrix computed from user's own rules
+  const sceneStrategies = useMemo(() => {
+    const now = new Date();
+    const nowTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    const scenes = [
+      { key: 'subway', title: '🚇 地铁出行', sampleAmount: 5, channel: 'any' },
+      { key: 'shared_bike', title: '🚲 共享单车', sampleAmount: 2, channel: 'any' },
+      { key: 'online_shop', title: '🛍️ 线上/快捷支付', sampleAmount: 1000, channel: 'alipay' },
+      { key: 'any', title: '💳 大额消费 (¥5000)', sampleAmount: 5000, channel: 'any' }
+    ];
+
+    return scenes.map(sc => {
+      const recs = evaluateRecommendations(
+        {
+          amount: sc.sampleAmount,
+          scene: sc.key,
+          channel: sc.channel,
+          currentTime: nowTime,
+          currentDate: todayStr
+        },
+        state.rules,
+        state.activities,
+        state.rewardActivities,
+        state.feedback
+      );
+      const topEligible = recs.find(r => r.isEligible && r.totalEffectiveBenefit > 0);
+      const runnerUp = recs.filter(r => r.isEligible && r.totalEffectiveBenefit > 0)[1];
+      return {
+        ...sc,
+        topEligible,
+        runnerUp,
+        totalMatches: recs.length
+      };
+    });
+  }, [state.rules, state.activities, state.rewardActivities, state.feedback, todayStr]);
 
   // Asset qualified estimated total
   const assetQualifiedTotal = useMemo(() => {
@@ -144,7 +213,7 @@ export const DashboardView: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
           <Calendar className="w-4 h-4 text-slate-400" />
-          <span>统计周期: 2026年11月 · 活跃规则 {activeRulesCount} 条</span>
+          <span>统计周期: {currentYear}年{currentMonthNum}月 · 活跃规则 {activeRulesCount} 条</span>
         </div>
       </div>
 
@@ -174,7 +243,7 @@ export const DashboardView: React.FC = () => {
             {formatCurrency(monthlySaved)}
           </div>
           <div className="text-3xs sm:text-2xs text-slate-400">
-            11月立减与即时返还
+            {currentMonthNum}月立减与即时返还
           </div>
         </div>
 
@@ -187,8 +256,8 @@ export const DashboardView: React.FC = () => {
           <div className="text-lg sm:text-2xl font-bold font-mono tabular-nums text-indigo-600 dark:text-indigo-400">
             {formatCurrency(totalCashback)}
           </div>
-          <div className="text-3xs sm:text-2xs text-slate-400">
-            交行/兴业/快捷支付
+          <div className="text-3xs sm:text-2xs text-slate-400 truncate">
+            {activeCashbackBanksSummary}
           </div>
         </div>
 
@@ -201,8 +270,8 @@ export const DashboardView: React.FC = () => {
           <div className="text-lg sm:text-2xl font-bold font-mono tabular-nums text-amber-600 dark:text-amber-400">
             {formatCurrency(assetQualifiedTotal)}
           </div>
-          <div className="text-3xs sm:text-2xs text-slate-400">
-            建行立减金 + 工行积分
+          <div className="text-3xs sm:text-2xs text-slate-400 truncate">
+            {activeAssetBanksSummary}
           </div>
         </div>
 
@@ -234,11 +303,11 @@ export const DashboardView: React.FC = () => {
 
           {/* Stacked Progress Bar */}
           <div className="w-full h-3.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
-            {typeStats.map((item, idx) => (
+            {typeStats.filter(item => item.value > 0).map((item, idx) => (
               <div
                 key={idx}
                 className={`${item.color} h-full transition-all`}
-                style={{ width: `${Math.max(item.pct, 4)}%` }}
+                style={{ width: `${item.pct}%` }}
                 title={`${item.name}: ${item.pct}% (¥${item.value})`}
               />
             ))}
@@ -263,7 +332,13 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-2xs text-slate-500 dark:text-slate-400 leading-relaxed">
-            💡 提示：资产日均达标与快捷支付满额活动贡献了近 60% 的总收益，结合日常小额乘车码即时立减，可达成收益最大化。
+            {(() => {
+              const topCategory = [...typeStats].sort((a, b) => b.value - a.value)[0];
+              if (!topCategory || topCategory.value <= 0) {
+                return '💡 提示：记录实测消费或绑定银行达标活动后，此处将自动汇总您的收益分布结构。';
+              }
+              return `💡 提示：当前「${topCategory.name}」贡献了 ${topCategory.pct}% 的已统计收益，结合日常小额立减与阶梯满额活动可进一步放大回报。`;
+            })()}
           </div>
         </div>
 
@@ -326,75 +401,57 @@ export const DashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* Best Strategy by Scene Matrix */}
+      {/* Dynamic Best Strategy by Scene Matrix */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div>
             <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-              各典型消费场景最优用卡策略矩阵
+              各典型消费场景当前最优用卡策略矩阵
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              根据您的规则库与活动库自动提炼出的各高频场景最佳姿势
+              根据您的真实规则库、当前时间与剩余频次动态演算推荐
             </p>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          {/* Scene 1: Subway */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">🚇 地铁通勤</span>
-              <span className="text-2xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">5折 / -¥1.6</span>
-            </div>
-            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-              早高峰(06:30-10:00)用【支付宝超级出行卡】享5折封顶2元；平峰期用【交行数币乘车码】立减1.6元。
-            </div>
-            <div className="text-2xs text-slate-400">
-              月省预估: ¥40 - ¥60
-            </div>
-          </div>
+          {sceneStrategies.map(sc => (
+            <div key={sc.key} className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white">{sc.title}</span>
+                  {sc.topEligible ? (
+                    <span className="text-2xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                      省 {formatCurrency(sc.topEligible.totalEffectiveBenefit)}
+                    </span>
+                  ) : (
+                    <span className="text-2xs font-mono text-slate-400">暂无可用</span>
+                  )}
+                </div>
 
-          {/* Scene 2: Shared Bike */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">🚲 共享单车</span>
-              <span className="text-2xs font-mono font-semibold text-emerald-600 dark:text-emerald-400">低至0.01元</span>
-            </div>
-            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-              【兴业生活App】扫码青桔满1.5减1.49(1分钱骑行4次/月)，哈啰单车立减1.5元(10次/月)。
-            </div>
-            <div className="text-2xs text-slate-400">
-              月省预估: ¥15 - ¥21
-            </div>
-          </div>
+                {sc.topEligible ? (
+                  <div className="text-xs text-slate-700 dark:text-slate-300 font-medium mt-2 space-y-1">
+                    <div>
+                      首选【{sc.topEligible.name}】({sc.topEligible.bank})
+                    </div>
+                    {sc.runnerUp && (
+                      <div className="text-2xs text-slate-500 dark:text-slate-400">
+                        备选：{sc.runnerUp.name} (+¥{sc.runnerUp.totalEffectiveBenefit})
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-2xs text-slate-400 mt-2">
+                    当前时段或卡包中暂无匹配此场景（试算 ¥{sc.sampleAmount}）的有效规则。
+                  </div>
+                )}
+              </div>
 
-          {/* Scene 3: Online Shopping / QuickPay */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">🛍️ 线上电商/快捷支付</span>
-              <span className="text-2xs font-mono font-semibold text-indigo-600 dark:text-indigo-400">返金+抽大奖</span>
+              <div className="text-2xs text-slate-400 pt-1 border-t border-slate-200/50 dark:border-slate-700/50">
+                试算金额 ¥{sc.sampleAmount} · 共 {sc.totalMatches} 项匹配
+              </div>
             </div>
-            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-              优先选【支付宝快捷支付】满1000返5元/满5000抽88元大奖；或微信支付使用【农行信用卡】单笔满1000享3倍积分。
-            </div>
-            <div className="text-2xs text-slate-400">
-              月省预估: ¥35 - ¥108
-            </div>
-          </div>
-
-          {/* Scene 4: Big Spend & Milestone */}
-          <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700/60 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-900 dark:text-white">💳 大额达标(¥5000+)</span>
-              <span className="text-2xs font-mono font-semibold text-purple-600 dark:text-purple-400">双重抽奖+返15</span>
-            </div>
-            <div className="text-xs text-slate-700 dark:text-slate-300 font-medium">
-              优先刷【交通银行信用卡】满5000送抽奖1次+返15元，满8000再加送抽奖1次；或选【农行微信满5000返15刷卡金】。
-            </div>
-            <div className="text-2xs text-slate-400">
-              单笔收益: ¥30 - ¥88
-            </div>
-          </div>
+          ))}
         </div>
       </div>
 
@@ -413,12 +470,10 @@ export const DashboardView: React.FC = () => {
                 onChange={e => setSelectedBankFilter(e.target.value)}
                 className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs text-slate-800 dark:text-slate-200"
               >
-                <option value="all">全部银行</option>
-                <option value="交通银行">交通银行</option>
-                <option value="建设银行">建设银行</option>
-                <option value="农业银行">农业银行</option>
-                <option value="兴业银行">兴业银行</option>
-                <option value="支付宝">支付宝</option>
+                <option value="all">全部银行 ({feedbackBanks.length}家)</option>
+                {feedbackBanks.map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
               </select>
             </div>
           </div>

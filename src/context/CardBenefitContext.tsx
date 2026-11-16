@@ -14,6 +14,7 @@ import {
   FeedbackRecord
 } from '../types/cardBenefit';
 import { getDefaultAppState, getEmptyAppState, inferBankName } from '../data/initialData';
+import { getLocalDateString } from '../utils/engine';
 
 const STORAGE_KEY = 'card_benefit_pro_user_data';
 
@@ -137,19 +138,56 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const updateFeedbackRecord = (updatedRecord: FeedbackRecord) => {
-    setState(prev => ({
-      ...prev,
-      feedback: prev.feedback.map(f => (f.id === updatedRecord.id ? updatedRecord : f)),
-      lastUpdated: new Date().toISOString()
-    }));
+    setState(prev => {
+      const oldRecord = prev.feedback.find(f => f.id === updatedRecord.id);
+      const amountDelta = oldRecord ? updatedRecord.amount - oldRecord.amount : 0;
+
+      const updatedActivities =
+        oldRecord && amountDelta !== 0
+          ? prev.activities.map(act => {
+              const hadOld = oldRecord.contributedActivities?.includes(act.name);
+              const hasNew = updatedRecord.contributedActivities?.includes(act.name);
+              if (hadOld && hasNew) {
+                return { ...act, currentSpend: Math.max(0, (act.currentSpend || 0) + amountDelta) };
+              }
+              return act;
+            })
+          : prev.activities;
+
+      return {
+        ...prev,
+        activities: updatedActivities,
+        feedback: prev.feedback.map(f => (f.id === updatedRecord.id ? updatedRecord : f)),
+        lastUpdated: new Date().toISOString()
+      };
+    });
   };
 
   const deleteFeedbackRecord = (id: string) => {
-    setState(prev => ({
-      ...prev,
-      feedback: prev.feedback.filter(f => f.id !== id),
-      lastUpdated: new Date().toISOString()
-    }));
+    setState(prev => {
+      const target = prev.feedback.find(f => f.id === id);
+      const updatedRules = target
+        ? prev.rules.map(r =>
+            r.id === target.ruleId ? { ...r, usedCount: Math.max(0, (r.usedCount || 0) - 1) } : r
+          )
+        : prev.rules;
+      const updatedActivities =
+        target && target.contributedActivities && target.contributedActivities.length > 0
+          ? prev.activities.map(act =>
+              target.contributedActivities!.includes(act.name)
+                ? { ...act, currentSpend: Math.max(0, (act.currentSpend || 0) - (target.amount || 0)) }
+                : act
+            )
+          : prev.activities;
+
+      return {
+        ...prev,
+        rules: updatedRules,
+        activities: updatedActivities,
+        feedback: prev.feedback.filter(f => f.id !== id),
+        lastUpdated: new Date().toISOString()
+      };
+    });
   };
 
   const toggleRule = (ruleId: string) => {
@@ -191,15 +229,34 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const addBankAssetEntry = (entry: Omit<BankAssetEntry, 'id'>) => {
-    const newEntry: BankAssetEntry = {
-      ...entry,
-      id: `asset-entry-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
-    };
-    setState(prev => ({
-      ...prev,
-      bankAssetEntries: [...prev.bankAssetEntries, newEntry],
-      lastUpdated: new Date().toISOString()
-    }));
+    setState(prev => {
+      const existingIdx = prev.bankAssetEntries.findIndex(
+        e => e.activityId === entry.activityId && e.date === entry.date
+      );
+      if (existingIdx >= 0) {
+        const updated = [...prev.bankAssetEntries];
+        updated[existingIdx] = {
+          ...updated[existingIdx],
+          amount: entry.amount,
+          notes: entry.notes
+        };
+        return {
+          ...prev,
+          bankAssetEntries: updated,
+          lastUpdated: new Date().toISOString()
+        };
+      }
+
+      const newEntry: BankAssetEntry = {
+        ...entry,
+        id: `asset-entry-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`
+      };
+      return {
+        ...prev,
+        bankAssetEntries: [...prev.bankAssetEntries, newEntry],
+        lastUpdated: new Date().toISOString()
+      };
+    });
   };
 
   const updateBankAssetEntry = (updatedEntry: BankAssetEntry) => {
@@ -221,7 +278,7 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const addActivity = (activity: MilestoneActivity) => {
     setState(prev => ({
       ...prev,
-      activities: [activity, ...prev.activities],
+      activities: [{ ...activity, currentSpend: activity.currentSpend ?? 0 }, ...prev.activities],
       lastUpdated: new Date().toISOString()
     }));
   };
@@ -314,7 +371,8 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const mergedActivities = (targetState.activities || []).map((a: any) => ({
         ...a,
-        bank: a.bank || inferBankName(a.name || '')
+        bank: a.bank || inferBankName(a.name || ''),
+        currentSpend: a.currentSpend ?? 0
       }));
 
       const mergedRewardActivities = (targetState.rewardActivities || []).map((ra: any) => ({
@@ -380,7 +438,7 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Aggregated calculations
   const totalSaved = state.feedback.reduce((sum, f) => sum + (f.actual || f.expected || 0), 0);
 
-  const currentMonthPrefix = new Date().toISOString().slice(0, 7);
+  const currentMonthPrefix = getLocalDateString().slice(0, 7);
   const monthlySaved = state.feedback
     .filter(f => (f.when || f.feedbackAt || '').startsWith(currentMonthPrefix))
     .reduce((sum, f) => sum + (f.actual || f.expected || 0), 0);

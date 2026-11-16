@@ -5,7 +5,12 @@
 
 import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { formatCurrency } from '../utils/engine';
+import {
+  formatCurrency,
+  getLocalDateString,
+  getMonthEndDateString,
+  getNowLocalDateTimeString
+} from '../utils/engine';
 import { inferBankName } from '../data/initialData';
 import { MilestoneActivity, RewardComboActivity, ActivityTier, ComboRule } from '../types/cardBenefit';
 import {
@@ -62,9 +67,11 @@ export const ComboActivitiesView: React.FC = () => {
 
   // New activity modal
   const [isNewActivityOpen, setIsNewActivityOpen] = useState(false);
-  const [newActivityName, setNewActivityName] = useState('支付宝快捷支付11月满额达标');
+  const [newActivityName, setNewActivityName] = useState('支付宝快捷支付满额达标');
   const [newActivityBank, setNewActivityBank] = useState('支付宝');
   const [newActivityChannel, setNewActivityChannel] = useState('alipay');
+  const [newActivityStart, setNewActivityStart] = useState(() => `${getLocalDateString().slice(0, 7)}-01`);
+  const [newActivityEnd, setNewActivityEnd] = useState(() => getMonthEndDateString(getLocalDateString().slice(0, 7)));
   const [newActivityNotes, setNewActivityNotes] = useState('支付宝快捷支付消费达标赢立减金与抽奖');
   const [newActivityTiers, setNewActivityTiers] = useState<Array<{ target: number; rewardName: string; estimatedReward: number }>>([
     { target: 1000, rewardName: '5元立减金', estimatedReward: 5 },
@@ -74,21 +81,15 @@ export const ComboActivitiesView: React.FC = () => {
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  // Compute spend for each activity based on feedback ledger + manual entries
-  const getActivitySpend = (activityName: string, bank?: string, channel?: string): number => {
+  // Compute spend directly from activity.currentSpend (avoiding double counting when addFeedbackRecord updates currentSpend)
+  const getActivitySpend = (activityName: string): number => {
     const matchedAct = state.activities.find(a => a.name === activityName);
-    let base = matchedAct?.currentSpend || 0;
-
-    const ledgerContribution = state.feedback
-      .filter(f => {
-        if (f.contributedActivities && f.contributedActivities.includes(activityName)) return true;
-        if (f.note && f.note.includes(activityName)) return true;
-        if (bank && f.bank === bank && f.ruleName.includes(activityName)) return true;
-        return false;
-      })
+    if (matchedAct && typeof matchedAct.currentSpend === 'number') {
+      return matchedAct.currentSpend;
+    }
+    return state.feedback
+      .filter(f => f.contributedActivities && f.contributedActivities.includes(activityName))
       .reduce((sum, f) => sum + (f.amount || 0), 0);
-
-    return base + ledgerContribution;
   };
 
   // Unique banks list
@@ -168,7 +169,7 @@ export const ComboActivitiesView: React.FC = () => {
       actual: 0,
       confirmed: true,
       result: 'confirmed',
-      when: new Date().toISOString().slice(0, 16),
+      when: getNowLocalDateTimeString(),
       note: `记入【${targetActivity}】消费推进`,
       contributedActivities: [targetActivity]
     });
@@ -191,10 +192,11 @@ export const ComboActivitiesView: React.FC = () => {
       platform: 'any',
       channel: newActivityChannel,
       scene: 'any',
-      start: new Date().toISOString().slice(0, 10),
-      end: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+      start: newActivityStart || getLocalDateString(),
+      end: newActivityEnd || getMonthEndDateString(getLocalDateString().slice(0, 7)),
       period: 'month',
       rewardMode: 'cumulative',
+      currentSpend: 0,
       notes: newActivityNotes.trim(),
       tiers: newActivityTiers.map((t, idx) => ({
         id: `tier-${Date.now()}-${idx}`,
@@ -467,7 +469,7 @@ export const ComboActivitiesView: React.FC = () => {
                 ? activity.bank
                 : inferBankName(activity.name);
 
-            const currentSpend = getActivitySpend(activity.name, displayBank, activity.channel);
+            const currentSpend = getActivitySpend(activity.name);
             const highestTier = activity.tiers.reduce((max, t) => (t.target > max ? t.target : max), 1);
             const nextTier = activity.tiers.find(t => t.target > currentSpend);
             const isAlipayQuickpay =
@@ -943,14 +945,29 @@ export const ComboActivitiesView: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
-                <input
-                  type="text"
-                  value={editingMilestone.notes || ''}
-                  onChange={e => setEditingMilestone({ ...editingMilestone, notes: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">当前累计已消费 (元)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editingMilestone.currentSpend ?? 0}
+                    onChange={e =>
+                      setEditingMilestone({ ...editingMilestone, currentSpend: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
+                  <input
+                    type="text"
+                    value={editingMilestone.notes || ''}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, notes: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
               </div>
 
               {/* Tiers list editor */}
@@ -1265,6 +1282,27 @@ export const ComboActivitiesView: React.FC = () => {
                     <option value="unionpay">银联云闪付</option>
                     <option value="any">不限渠道</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">开始日期</label>
+                  <input
+                    type="date"
+                    value={newActivityStart}
+                    onChange={e => setNewActivityStart(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">结束日期</label>
+                  <input
+                    type="date"
+                    value={newActivityEnd}
+                    onChange={e => setNewActivityEnd(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                  />
                 </div>
               </div>
 

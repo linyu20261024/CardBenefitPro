@@ -5,7 +5,13 @@
 
 import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { calculateAssetMetrics, formatCurrency, formatBigNumber } from '../utils/engine';
+import {
+  calculateAssetMetrics,
+  formatCurrency,
+  formatBigNumber,
+  getLocalDateString,
+  getMonthEndDateString
+} from '../utils/engine';
 import { BankAssetActivity, BankAssetEntry, BankAssetTier } from '../types/cardBenefit';
 import {
   Landmark,
@@ -70,7 +76,7 @@ export const AssetMilestonesView: React.FC = () => {
   }, [selectedActivity, state.bankAssetEntries]);
 
   // Form state for adding daily asset entry
-  const [newDate, setNewDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [newDate, setNewDate] = useState<string>(() => getLocalDateString());
   const [newAmount, setNewAmount] = useState<string>('50000');
   const [newNote, setNewNote] = useState<string>('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -81,7 +87,7 @@ export const AssetMilestonesView: React.FC = () => {
   // New Bank Asset Activity modal
   const [isNewAssetModalOpen, setIsNewAssetModalOpen] = useState(false);
   const [newBankName, setNewBankName] = useState('建设银行');
-  const [newMonth, setNewMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [newMonth, setNewMonth] = useState(() => getLocalDateString().slice(0, 7));
   const [newBaseline, setNewBaseline] = useState<number>(0);
   const [newScope, setNewScope] = useState('活期存款 + 投资理财 + 基金');
   const [newNotes, setNewNotes] = useState('月日均资产达标5w/10w享立减金奖励');
@@ -128,7 +134,7 @@ export const AssetMilestonesView: React.FC = () => {
       bank: newBankName.trim(),
       month: newMonth,
       start: `${newMonth}-01`,
-      end: `${newMonth}-31`,
+      end: getMonthEndDateString(newMonth),
       baseline: newBaseline,
       scope: newScope.trim(),
       notes: newNotes.trim(),
@@ -341,10 +347,11 @@ export const AssetMilestonesView: React.FC = () => {
                 <div
                   className="bg-emerald-400 h-full rounded-full transition-all"
                   style={{
-                    width: `${Math.min(
-                      100,
-                      (metrics.projectedMonthEndAverage / (metrics.nextTier?.threshold || 100000)) * 100
-                    )}%`
+                    width: `${
+                      metrics.nextTier
+                        ? Math.min(100, (metrics.projectedMonthEndAverage / metrics.nextTier.threshold) * 100)
+                        : 100
+                    }%`
                   }}
                 />
               </div>

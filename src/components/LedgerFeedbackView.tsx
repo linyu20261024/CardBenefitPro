@@ -3,9 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
-import { formatCurrency, calculateRuleUsage, getLocalDateString, getNowLocalDateTimeString } from '../utils/engine';
+import {
+  formatCurrency,
+  calculateRuleUsage,
+  getLocalDateString,
+  getNowLocalDateTimeString,
+  getMonthEndDateString
+} from '../utils/engine';
 import { FeedbackRecord, InstantRule } from '../types/cardBenefit';
 import {
   History,
@@ -23,10 +29,40 @@ import {
   Calendar
 } from 'lucide-react';
 
+function getDefaultNewRuleState(): Partial<InstantRule> {
+  const today = getLocalDateString();
+  const month = today.slice(0, 7);
+  return {
+    name: '',
+    bank: '交通银行',
+    platform: 'transport',
+    scene: 'subway',
+    channel: 'alipay',
+    type: 'fixed',
+    fixed: 1,
+    rate: 0,
+    cap: 0,
+    min: 0,
+    dateStart: `${month}-01`,
+    dateEnd: getMonthEndDateString(month),
+    start: '00:00',
+    end: '23:59',
+    dailyLimit: 1,
+    weeklyLimit: null,
+    monthlyLimit: 15,
+    totalLimit: null,
+    limit: 1,
+    limitPeriod: 'day',
+    usedCount: 0,
+    notes: ''
+  };
+}
+
 export const LedgerFeedbackView: React.FC = () => {
   const {
     state,
     addFeedbackRecord,
+    updateFeedbackRecord,
     deleteFeedbackRecord,
     toggleRule,
     addRule,
@@ -40,6 +76,14 @@ export const LedgerFeedbackView: React.FC = () => {
   const [bankFilter, setBankFilter] = useState('all');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
+  // Dynamic available banks from both rules and feedback
+  const availableBanks = useMemo(() => {
+    const banks = new Set<string>();
+    state.rules.forEach(r => { if (r.bank) banks.add(r.bank); });
+    state.feedback.forEach(f => { if (f.bank) banks.add(f.bank); });
+    return Array.from(banks);
+  }, [state.rules, state.feedback]);
+
   // New feedback modal
   const [isAddFeedbackOpen, setIsAddFeedbackOpen] = useState(false);
   const [newFeedbackData, setNewFeedbackData] = useState({
@@ -51,8 +95,12 @@ export const LedgerFeedbackView: React.FC = () => {
     amount: 5,
     expected: 2,
     actual: 2,
+    when: getNowLocalDateTimeString(),
     note: ''
   });
+
+  // Edit feedback modal
+  const [editingFeedback, setEditingFeedback] = useState<FeedbackRecord | null>(null);
 
   // Edit rule modal
   const [editingRule, setEditingRule] = useState<InstantRule | null>(null);
@@ -60,30 +108,7 @@ export const LedgerFeedbackView: React.FC = () => {
 
   // New rule modal
   const [isAddRuleOpen, setIsAddRuleOpen] = useState(false);
-  const [newRuleData, setNewRuleData] = useState<Partial<InstantRule>>({
-    name: '',
-    bank: '交通银行',
-    platform: 'transport',
-    scene: 'subway',
-    channel: 'alipay',
-    type: 'fixed',
-    fixed: 1,
-    rate: 0,
-    cap: 0,
-    min: 0,
-    dateStart: '2026-11-01',
-    dateEnd: '2026-12-31',
-    start: '00:00',
-    end: '23:59',
-    dailyLimit: 1,
-    weeklyLimit: null,
-    monthlyLimit: 15,
-    totalLimit: null,
-    limit: 1,
-    limitPeriod: 'day',
-    usedCount: 0,
-    notes: ''
-  });
+  const [newRuleData, setNewRuleData] = useState<Partial<InstantRule>>(getDefaultNewRuleState);
 
   const filteredFeedback = state.feedback.filter(f => {
     if (bankFilter !== 'all' && f.bank !== bankFilter) return false;
@@ -111,10 +136,25 @@ export const LedgerFeedbackView: React.FC = () => {
       actual: newFeedbackData.actual,
       confirmed: true,
       result: 'confirmed',
-      when: getNowLocalDateTimeString(),
+      when: newFeedbackData.when.replace('T', ' ') || getNowLocalDateTimeString(),
       note: newFeedbackData.note
     });
     setIsAddFeedbackOpen(false);
+    setToastMsg('实测消费流水已记录！');
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleUpdateFeedbackSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingFeedback) return;
+    updateFeedbackRecord({
+      ...editingFeedback,
+      when: editingFeedback.when.replace('T', ' '),
+      editedAt: new Date().toISOString()
+    });
+    setEditingFeedback(null);
+    setToastMsg('实测流水记录已更新！');
+    setTimeout(() => setToastMsg(null), 3000);
   };
 
   const handleAddRuleSubmit = (e: React.FormEvent) => {
@@ -149,30 +189,7 @@ export const LedgerFeedbackView: React.FC = () => {
     setIsAddRuleOpen(false);
     setToastMsg(`新规则「${newRuleData.name}」已添加成功！`);
     setTimeout(() => setToastMsg(null), 3000);
-    setNewRuleData({
-      name: '',
-      bank: '交通银行',
-      platform: 'transport',
-      scene: 'subway',
-      channel: 'alipay',
-      type: 'fixed',
-      fixed: 1,
-      rate: 0,
-      cap: 0,
-      min: 0,
-      dateStart: '2026-11-01',
-      dateEnd: '2026-12-31',
-      start: '00:00',
-      end: '23:59',
-      dailyLimit: 1,
-      weeklyLimit: null,
-      monthlyLimit: 15,
-      totalLimit: null,
-      limit: 1,
-      limitPeriod: 'day',
-      usedCount: 0,
-      notes: ''
-    });
+    setNewRuleData(getDefaultNewRuleState());
   };
 
   const handleOpenEditRule = (rule: InstantRule) => {
@@ -267,21 +284,19 @@ export const LedgerFeedbackView: React.FC = () => {
             onChange={e => setBankFilter(e.target.value)}
             className="px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-800 dark:text-slate-200"
           >
-            <option value="all">全发卡机构</option>
-            <option value="交通银行">交通银行</option>
-            <option value="建设银行">建设银行</option>
-            <option value="农业银行">农业银行</option>
-            <option value="兴业银行">兴业银行</option>
-            <option value="支付宝">支付宝</option>
-            <option value="光大银行">光大银行</option>
-            <option value="工商银行">工商银行</option>
-            <option value="广发银行">广发银行</option>
+            <option value="all">全发卡机构 ({availableBanks.length}家)</option>
+            {availableBanks.map(b => (
+              <option key={b} value={b}>{b}</option>
+            ))}
           </select>
         </div>
 
         {activeSubTab === 'feedback' ? (
           <button
-            onClick={() => setIsAddFeedbackOpen(true)}
+            onClick={() => {
+              setNewFeedbackData(prev => ({ ...prev, when: getNowLocalDateTimeString() }));
+              setIsAddFeedbackOpen(true);
+            }}
             className="px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-1.5 shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -289,7 +304,10 @@ export const LedgerFeedbackView: React.FC = () => {
           </button>
         ) : (
           <button
-            onClick={() => setIsAddRuleOpen(true)}
+            onClick={() => {
+              setNewRuleData(getDefaultNewRuleState());
+              setIsAddRuleOpen(true);
+            }}
             className="px-3.5 py-1.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg hover:bg-slate-800 transition-colors flex items-center gap-1.5 shrink-0"
           >
             <Plus className="w-4 h-4" />
@@ -347,13 +365,22 @@ export const LedgerFeedbackView: React.FC = () => {
                         {item.note || item.contributedActivities?.join(', ') || '-'}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <button
-                          onClick={() => deleteFeedbackRecord(item.id)}
-                          className="text-slate-400 hover:text-rose-500 p-1"
-                          title="删除记录"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setEditingFeedback({ ...item })}
+                            className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1"
+                            title="编辑记录"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => deleteFeedbackRecord(item.id)}
+                            className="text-slate-400 hover:text-rose-500 p-1"
+                            title="删除记录"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -425,20 +452,50 @@ export const LedgerFeedbackView: React.FC = () => {
                         {rule.channel}
                       </td>
                       <td className="py-3 px-4 font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                        {rule.type === 'fixed'
-                          ? `立减 ¥${rule.fixed}`
-                          : rule.type === 'rate'
-                          ? `${rule.rate}% (封顶¥${rule.cap})`
-                          : rule.type === 'cashback'
-                          ? `返现 ¥${rule.fixed}`
-                          : `${rule.type}`}
+                        <div>
+                          {rule.type === 'fixed'
+                            ? `立减 ¥${rule.fixed}`
+                            : rule.type === 'threshold'
+                            ? `满¥${rule.min || 0}减¥${rule.fixed}`
+                            : rule.type === 'rate'
+                            ? `减${rule.rate}%${rule.cap > 0 ? ` (封顶¥${rule.cap})` : ' (不封顶)'}`
+                            : rule.type === 'cashback'
+                            ? rule.fixed > 0
+                              ? `返现 ¥${rule.fixed}`
+                              : `返现 ${rule.rate}%${rule.cap > 0 ? ` (封顶¥${rule.cap})` : ''}`
+                            : rule.type === 'points'
+                            ? rule.fixed > 0
+                              ? `赠${rule.fixed}积分`
+                              : `${rule.rate || 1}倍积分${rule.cap > 0 ? ` (封顶${rule.cap}分)` : ''}`
+                            : rule.type === 'lottery'
+                            ? `抽奖 (估值¥${rule.fixed || 3})`
+                            : rule.type === 'alipay_quickpay'
+                            ? `快捷支付返¥${rule.fixed || 5}`
+                            : rule.type}
+                        </div>
+                        {(rule.min > 0 && rule.type !== 'threshold') || (rule.cap > 0 && rule.type !== 'rate' && rule.type !== 'cashback' && rule.type !== 'points') ? (
+                          <div className="text-3xs text-slate-400 font-normal mt-0.5">
+                            {rule.min > 0 && rule.type !== 'threshold' ? `满¥${rule.min}起用 ` : ''}
+                            {rule.cap > 0 && rule.type !== 'rate' && rule.type !== 'cashback' && rule.type !== 'points' ? `封顶¥${rule.cap}` : ''}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3 px-4 font-mono text-2xs text-slate-500">
                         <div className="font-semibold text-slate-700 dark:text-slate-300">
-                          {rule.start && rule.end && rule.start !== '00:00' && rule.end !== '23:59'
+                          {rule.start && rule.end && !(rule.start === '00:00' && rule.end === '23:59')
                             ? `${rule.start}-${rule.end}`
                             : '全天生效'}
                         </div>
+                        {(rule.dateStart || rule.dateEnd) && (
+                          <div className="text-3xs text-slate-400 flex items-center gap-1 mt-0.5">
+                            <span>{rule.dateStart || '...'} ~ {rule.dateEnd || '...'}</span>
+                            {rule.dateEnd && rule.dateEnd < getLocalDateString() && (
+                              <span className="px-1 py-0.2 bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400 rounded font-sans font-semibold">
+                                已过期
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="mt-1">
                           {(() => {
                             const usage = calculateRuleUsage(rule, state.feedback, getLocalDateString());
@@ -612,6 +669,16 @@ export const LedgerFeedbackView: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费时间</label>
+                <input
+                  type="datetime-local"
+                  value={newFeedbackData.when.replace(' ', 'T').slice(0, 16)}
+                  onChange={e => setNewFeedbackData({ ...newFeedbackData, when: e.target.value.replace('T', ' ') })}
+                  className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">备注说明</label>
                 <input
                   type="text"
@@ -636,6 +703,128 @@ export const LedgerFeedbackView: React.FC = () => {
                 className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg"
               >
                 保存记账
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* Edit Feedback Modal */}
+      {editingFeedback && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <form
+            onSubmit={handleUpdateFeedbackSubmit}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white">修改实测消费记录</h3>
+              <button
+                type="button"
+                onClick={() => setEditingFeedback(null)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动 / 规则名称</label>
+                <input
+                  type="text"
+                  required
+                  value={editingFeedback.ruleName}
+                  onChange={e => setEditingFeedback({ ...editingFeedback, ruleName: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构</label>
+                  <input
+                    type="text"
+                    value={editingFeedback.bank || ''}
+                    onChange={e => setEditingFeedback({ ...editingFeedback, bank: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
+                  <select
+                    value={editingFeedback.channel}
+                    onChange={e => setEditingFeedback({ ...editingFeedback, channel: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="alipay">支付宝快捷支付</option>
+                    <option value="wechat">微信支付</option>
+                    <option value="unionpay">云闪付</option>
+                    <option value="transit_code">乘车码</option>
+                    <option value="mobile_pay">手机Pay</option>
+                    <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">不限渠道</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费金额 (元)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingFeedback.amount}
+                    onChange={e => setEditingFeedback({ ...editingFeedback, amount: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">实际优惠 (元)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={editingFeedback.actual}
+                    onChange={e => setEditingFeedback({ ...editingFeedback, actual: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 font-mono text-emerald-600 font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费时间</label>
+                <input
+                  type="datetime-local"
+                  value={(editingFeedback.when || '').replace(' ', 'T').slice(0, 16)}
+                  onChange={e => setEditingFeedback({ ...editingFeedback, when: e.target.value.replace('T', ' ') })}
+                  className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">备注说明</label>
+                <input
+                  type="text"
+                  value={editingFeedback.note || ''}
+                  onChange={e => setEditingFeedback({ ...editingFeedback, note: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setEditingFeedback(null)}
+                className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+              >
+                保存修改
               </button>
             </div>
           </form>
@@ -732,8 +921,8 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
               </div>
 
-              {/* Benefit Type & Amounts */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Benefit Type, Amounts, Min & Cap */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">优惠类型</label>
                   <select
@@ -742,16 +931,21 @@ export const LedgerFeedbackView: React.FC = () => {
                     className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="fixed">固定立减 (元)</option>
-                    <option value="rate">折扣比例 (%)</option>
-                    <option value="threshold">门槛立减 (元)</option>
-                    <option value="cashback">达标返现 (元)</option>
+                    <option value="rate">按比例折扣/减免 (%)</option>
+                    <option value="threshold">门槛满减 (元)</option>
+                    <option value="cashback">达标返现 (元/%)</option>
                     <option value="points">赠送积分 (点)</option>
-                    <option value="lottery">抽奖机会</option>
+                    <option value="lottery">达标抽奖</option>
+                    <option value="alipay_quickpay">支付宝快捷支付返现</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
-                    {editRuleData.type === 'rate' ? '折扣比例 (%)' : '优惠金额 (元)'}
+                    {editRuleData.type === 'rate'
+                      ? '优惠折扣比例 (% 如5折填50)'
+                      : editRuleData.type === 'points'
+                      ? '赠送积分数量 (点)'
+                      : '优惠金额 (元)'}
                   </label>
                   <input
                     type="number"
@@ -769,13 +963,28 @@ export const LedgerFeedbackView: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">满减门槛 (元)</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">满减/起用门槛 (元)</label>
                   <input
                     type="number"
                     step="any"
+                    min="0"
                     value={editRuleData.min}
                     onChange={e => setEditRuleData({ ...editRuleData, min: parseFloat(e.target.value) || 0 })}
                     placeholder="0为无门槛"
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    {editRuleData.type === 'points' ? '单笔积分封顶 (分)' : '单笔优惠封顶 (元)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={editRuleData.cap ?? 0}
+                    onChange={e => setEditRuleData({ ...editRuleData, cap: parseFloat(e.target.value) || 0 })}
+                    placeholder="0为不封顶"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
@@ -975,24 +1184,78 @@ export const LedgerFeedbackView: React.FC = () => {
               </div>
 
               {/* Date Validity */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">开始日期</label>
-                  <input
-                    type="date"
-                    value={editRuleData.dateStart || ''}
-                    onChange={e => setEditRuleData({ ...editRuleData, dateStart: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                  />
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl space-y-2 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>活动有效起止日期</span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        const month = today.slice(0, 7);
+                        setEditRuleData({
+                          ...editRuleData,
+                          dateStart: `${month}-01`,
+                          dateEnd: getMonthEndDateString(month)
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      当月有效
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        const year = today.slice(0, 4);
+                        setEditRuleData({
+                          ...editRuleData,
+                          dateStart: today,
+                          dateEnd: `${year}-12-31`
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      至年底
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const today = getLocalDateString();
+                        setEditRuleData({
+                          ...editRuleData,
+                          dateStart: today,
+                          dateEnd: '2027-12-31'
+                        });
+                      }}
+                      className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"
+                    >
+                      长期有效
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">截止日期</label>
-                  <input
-                    type="date"
-                    value={editRuleData.dateEnd || ''}
-                    onChange={e => setEditRuleData({ ...editRuleData, dateEnd: e.target.value })}
-                    className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
-                  />
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">开始日期</label>
+                    <input
+                      type="date"
+                      value={editRuleData.dateStart || ''}
+                      onChange={e => setEditRuleData({ ...editRuleData, dateStart: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-2xs text-slate-600 dark:text-slate-400 mb-1">截止日期</label>
+                    <input
+                      type="date"
+                      value={editRuleData.dateEnd || ''}
+                      onChange={e => setEditRuleData({ ...editRuleData, dateEnd: e.target.value })}
+                      className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1125,7 +1388,7 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">优惠类型</label>
                   <select
@@ -1134,20 +1397,34 @@ export const LedgerFeedbackView: React.FC = () => {
                     className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="fixed">固定立减 (元)</option>
-                    <option value="rate">折扣比例 (%)</option>
-                    <option value="threshold">门槛满减</option>
-                    <option value="cashback">达标返现</option>
-                    <option value="points">多倍积分</option>
+                    <option value="rate">按比例折扣/减免 (%)</option>
+                    <option value="threshold">门槛满减 (元)</option>
+                    <option value="cashback">达标返现 (元/%)</option>
+                    <option value="points">赠送积分 (点)</option>
                     <option value="lottery">达标抽奖</option>
+                    <option value="alipay_quickpay">支付宝快捷支付返现</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">优惠数值/立减额</label>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    {newRuleData.type === 'rate'
+                      ? '优惠折扣比例 (% 如5折填50)'
+                      : newRuleData.type === 'points'
+                      ? '赠送积分数量 (点)'
+                      : '优惠数值/立减额 (元)'}
+                  </label>
                   <input
                     type="number"
                     step="any"
-                    value={newRuleData.fixed}
-                    onChange={e => setNewRuleData({ ...newRuleData, fixed: parseFloat(e.target.value) || 0 })}
+                    value={newRuleData.type === 'rate' ? (newRuleData.rate ?? 0) : (newRuleData.fixed ?? 0)}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value) || 0;
+                      if (newRuleData.type === 'rate') {
+                        setNewRuleData({ ...newRuleData, rate: val });
+                      } else {
+                        setNewRuleData({ ...newRuleData, fixed: val });
+                      }
+                    }}
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
@@ -1156,8 +1433,24 @@ export const LedgerFeedbackView: React.FC = () => {
                   <input
                     type="number"
                     step="any"
+                    min="0"
                     value={newRuleData.min}
                     onChange={e => setNewRuleData({ ...newRuleData, min: parseFloat(e.target.value) || 0 })}
+                    placeholder="0为无门槛"
+                    className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    {newRuleData.type === 'points' ? '单笔积分封顶 (分)' : '单笔优惠封顶 (元)'}
+                  </label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={newRuleData.cap ?? 0}
+                    onChange={e => setNewRuleData({ ...newRuleData, cap: parseFloat(e.target.value) || 0 })}
+                    placeholder="0为不封顶"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
@@ -1350,7 +1643,7 @@ export const LedgerFeedbackView: React.FC = () => {
                         setNewRuleData({
                           ...newRuleData,
                           dateStart: `${month}-01`,
-                          dateEnd: `${month}-30`
+                          dateEnd: getMonthEndDateString(month)
                         });
                       }}
                       className="px-2 py-0.5 text-3xs font-medium rounded bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-300 transition-colors"

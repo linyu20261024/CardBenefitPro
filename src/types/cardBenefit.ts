@@ -207,6 +207,7 @@ export interface RecommendationResult {
   isBestInstant: boolean;        // 即时立减最高
   triggersCombo: boolean;        // 触发多重组合达标
   triggeredComboDetails: string[];
+  triggeredActivityNames?: string[]; // 关联促成的真实活动名称
   qualifications: string[];      // 资格与注意事项 (如 限时段, 领券, 次数限制)
   notes?: string;                // 规则或活动补充说明
   ruleRef: InstantRule | MilestoneActivity | RewardComboActivity;

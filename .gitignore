@@ -6,3 +6,15 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Uploaded assets & screenshots
+public/assets/
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# User data backups & exports
+*-backup-*.json
+card-recommender-backup*.json
+*.bak

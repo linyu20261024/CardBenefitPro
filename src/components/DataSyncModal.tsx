@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useCardBenefit } from '../context/CardBenefitContext';
+import { getLocalDateString } from '../utils/engine';
 import { Download, Upload, RefreshCw, Copy, Check, AlertCircle } from 'lucide-react';
 
 interface DataSyncModalProps {
@@ -13,7 +14,7 @@ interface DataSyncModalProps {
 }
 
 export const DataSyncModal: React.FC<DataSyncModalProps> = ({ isOpen, onClose }) => {
-  const { exportJsonData, importJsonData, resetToDefaultData, clearAllData, state } = useCardBenefit();
+  const { exportJsonData, importJsonData, clearAllData, state } = useCardBenefit();
 
   const [activeTab, setActiveTab] = useState<'export' | 'import' | 'reset'>(() => {
     return state.rules.length === 0 ? 'import' : 'export';
@@ -44,7 +45,7 @@ export const DataSyncModal: React.FC<DataSyncModalProps> = ({ isOpen, onClose })
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `card-recommender-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `card-recommender-backup-${getLocalDateString()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -76,13 +77,6 @@ export const DataSyncModal: React.FC<DataSyncModalProps> = ({ isOpen, onClose })
       setImportText(content);
     };
     reader.readAsText(file);
-  };
-
-  const handleResetConfirm = () => {
-    if (window.confirm('确认恢复初始推荐数据吗？您已添加的自定义记录将被重置为基准数据。')) {
-      resetToDefaultData();
-      onClose();
-    }
   };
 
   return (
@@ -135,7 +129,7 @@ export const DataSyncModal: React.FC<DataSyncModalProps> = ({ isOpen, onClose })
             }`}
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>恢复默认数据</span>
+            <span>清空与重置</span>
           </button>
         </div>
 
@@ -218,38 +212,19 @@ export const DataSyncModal: React.FC<DataSyncModalProps> = ({ isOpen, onClose })
 
         {/* Tab 3: Reset / Clear */}
         {activeTab === 'reset' && (
-          <div className="space-y-6 py-2">
-            {/* Option A: Restore default curated data */}
-            <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div className="space-y-0.5">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                  恢复系统预设数据（包含 26+ 条规则与活动）
-                </h4>
-                <p className="text-2xs text-slate-500 dark:text-slate-400">
-                  载入建行时光好礼多重连击、交行最红抽奖、建行/工行资产日均达标及支付宝快捷支付活动。
-                </p>
-              </div>
-              <button
-                onClick={handleResetConfirm}
-                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors shrink-0"
-              >
-                恢复预设数据
-              </button>
-            </div>
-
-            {/* Option B: Clear all data (blank slate) */}
+          <div className="space-y-4 py-2">
             <div className="p-4 rounded-xl border border-rose-200 dark:border-rose-950 bg-rose-50/50 dark:bg-rose-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="space-y-0.5">
                 <h4 className="text-xs font-bold text-rose-900 dark:text-rose-300">
-                  清空所有数据（纯净空白卡包）
+                  清空所有本地数据（恢复纯净空白卡包）
                 </h4>
                 <p className="text-2xs text-rose-700/80 dark:text-rose-400">
-                  清空现有全部用卡规则、达标活动与流水账本，从零开始建立专属于您的用卡规则库。
+                  清空现有全部用卡规则、达标活动与流水账本，恢复初始空白状态（建议清空前先导出 JSON 备份）。
                 </p>
               </div>
               <button
                 onClick={() => {
-                  if (window.confirm('确认清空所有规则与流水数据吗？清空后将从零开始。')) {
+                  if (window.confirm('确认清空所有规则与流水数据吗？清空后将恢复纯净空白卡包。')) {
                     clearAllData();
                     onClose();
                   }

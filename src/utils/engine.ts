@@ -49,6 +49,18 @@ export function getNowLocalDateTimeString(d: Date = new Date()): string {
 }
 
 /**
+ * Returns the exact last calendar date (YYYY-MM-DD) for a given YYYY-MM month string
+ */
+export function getMonthEndDateString(yearMonth: string): string {
+  const [yStr, mStr] = yearMonth.split('-');
+  const y = parseInt(yStr, 10);
+  const m = parseInt(mStr, 10);
+  if (!y || !m) return `${yearMonth}-30`;
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${yearMonth}-${String(lastDay).padStart(2, '0')}`;
+}
+
+/**
  * Returns the start (Monday) and end (Sunday) dates of the ISO week containing dateStr (YYYY-MM-DD)
  */
 export function getWeekStartAndEnd(dateStr: string): { start: string; end: string } {
@@ -184,12 +196,19 @@ export function evaluateRecommendations(
     let isEligible = true;
     const ineligibleReasons: string[] = [];
 
-    // Time window check (e.g. 06:30 - 10:00)
+    // Time window check (e.g. 06:30 - 10:00, 00:00 - 10:00, 18:00 - 23:59, or cross-midnight 22:00 - 06:00)
     let isTimeRestricted = false;
     let inTimeWindow = true;
-    if (rule.start && rule.end && rule.start !== '00:00' && rule.end !== '23:59') {
+    const hasTimeWindow = Boolean(
+      rule.start && rule.end && !(rule.start === '00:00' && rule.end === '23:59')
+    );
+    if (hasTimeWindow) {
       isTimeRestricted = true;
-      if (currentTime < rule.start || currentTime > rule.end) {
+      const inRange =
+        rule.start <= rule.end
+          ? currentTime >= rule.start && currentTime <= rule.end
+          : currentTime >= rule.start || currentTime <= rule.end;
+      if (!inRange) {
         inTimeWindow = false;
         isEligible = false;
         ineligibleReasons.push(`不在生效时段内 (限 ${rule.start}-${rule.end}，当前用卡时间 ${currentTime})`);
@@ -257,12 +276,16 @@ export function evaluateRecommendations(
     let lotteryValue = 0;
     const qualifications: string[] = [];
     const triggeredMilestones: string[] = [];
+    const triggeredActivityNames: string[] = [];
 
     if (isTimeRestricted) {
       qualifications.push(`限时段 ${rule.start}-${rule.end}${inTimeWindow ? ' (当前生效中)' : ' (当前未在时间段)'}`);
     }
     if (rule.min) {
       qualifications.push(`满¥${rule.min}起用${meetsMin ? '' : ' (未达标)'}`);
+    }
+    if (rule.cap && rule.cap > 0) {
+      qualifications.push(rule.type === 'points' ? `单笔封顶 ${rule.cap}积分` : `单笔封顶 ¥${rule.cap}`);
     }
     if (dailyLimit && dailyLimit > 0) {
       const rem = Math.max(0, dailyLimit - usage.dailyUsage);
@@ -282,19 +305,20 @@ export function evaluateRecommendations(
     }
 
     switch (rule.type) {
-      case 'fixed':
-        instantSavings = Math.min(rule.fixed, amount);
+      case 'fixed': {
+        const raw = rule.cap > 0 ? Math.min(rule.fixed, rule.cap) : rule.fixed;
+        instantSavings = Math.min(raw, amount);
         break;
+      }
       case 'rate': {
         const calculated = (amount * (rule.rate || 0)) / 100;
         instantSavings = rule.cap > 0 ? Math.min(calculated, rule.cap) : calculated;
-        // Don't exceed total amount
         instantSavings = Math.min(instantSavings, amount);
         break;
       }
       case 'cashback':
         if (rule.fixed > 0) {
-          cashbackReward = rule.fixed;
+          cashbackReward = rule.cap > 0 ? Math.min(rule.fixed, rule.cap) : rule.fixed;
         } else if (rule.rate > 0) {
           const calc = (amount * rule.rate) / 100;
           cashbackReward = rule.cap > 0 ? Math.min(calc, rule.cap) : calc;
@@ -307,40 +331,90 @@ export function evaluateRecommendations(
       case 'lottery':
         lotteryChances = 1;
         lotteryValue = rule.fixed > 0 ? rule.fixed : LOTTERY_RMB_VALUE;
+        if (rule.cap > 0) lotteryValue = Math.min(lotteryValue, rule.cap);
         break;
-      case 'threshold':
-        instantSavings = Math.min(rule.fixed, amount);
+      case 'threshold': {
+        const raw = rule.cap > 0 ? Math.min(rule.fixed, rule.cap) : rule.fixed;
+        instantSavings = Math.min(raw, amount);
         break;
+      }
       case 'alipay_quickpay':
         cashbackReward = rule.fixed > 0 ? rule.fixed : 5;
+        if (rule.cap > 0) cashbackReward = Math.min(cashbackReward, rule.cap);
         triggeredMilestones.push('计入支付宝快捷支付月度满额累计');
         break;
     }
 
-    // Check combo triggers
-    // If bank is CCB and amount >= 16 in Alipay/WeChat, triggers CCB时光好礼
-    if (
-      (rule.bank === '建设银行' || !rule.bank) &&
-      amount >= 16 &&
-      (channel === 'alipay' || channel === 'wechat' || channel === 'any')
-    ) {
-      pointsReward += 100;
-      triggeredMilestones.push('触发建行龙卡时光好礼日达标(+100分)');
-      if (amount >= 200) {
-        triggeredMilestones.push('加速建行周累计满200元目标');
+    // Check real active MilestoneActivities & RewardComboActivities in state
+    const effectiveRuleChannel = rule.channel === 'any' ? channel : rule.channel;
+
+    for (const act of activities) {
+      const actEndDate = extractDateStr(act.end);
+      const actStartDate = extractDateStr(act.start);
+      if (actEndDate && curDateStr > actEndDate) continue;
+      if (actStartDate && curDateStr < actStartDate) continue;
+
+      const bankMatches =
+        !act.bank ||
+        act.bank === '通用/多行' ||
+        act.bank === '合作银行' ||
+        act.bank === rule.bank ||
+        (act.bank === '支付宝' && (effectiveRuleChannel === 'alipay' || rule.channel === 'alipay'));
+      const channelMatches =
+        act.channel === 'any' ||
+        effectiveRuleChannel === 'any' ||
+        act.channel === effectiveRuleChannel;
+
+      if (bankMatches && channelMatches) {
+        const curSpend = act.currentSpend || 0;
+        const nextHitTier = act.tiers.find(t => curSpend < t.target && curSpend + amount >= t.target);
+        if (nextHitTier) {
+          triggeredMilestones.push(`叠加推进【${act.name}】达标¥${nextHitTier.target} (${nextHitTier.rewardName})`);
+          triggeredActivityNames.push(act.name);
+        } else if (act.tiers.some(t => curSpend < t.target)) {
+          triggeredMilestones.push(`计入【${act.name}】累计消费`);
+          triggeredActivityNames.push(act.name);
+        }
       }
     }
 
-    // If channel is Alipay, triggers Alipay quick pay
-    if ((channel === 'alipay' || rule.channel === 'alipay') && amount >= 18) {
-      triggeredMilestones.push('计入支付宝快捷支付满额达标');
-    }
+    for (const combo of rewardActivities) {
+      const comboEndDate = extractDateStr(combo.end);
+      const comboStartDate = extractDateStr(combo.start);
+      if (comboEndDate && curDateStr > comboEndDate) continue;
+      if (comboStartDate && curDateStr < comboStartDate) continue;
 
-    // If bank is 交行 and amount is large, triggers 最红星期五
-    if (rule.bank === '交通银行' && amount >= 5000) {
-      lotteryChances += 1;
-      lotteryValue += 15;
-      triggeredMilestones.push('达成交行最红5000元抽奖机会1次');
+      const bankMatches =
+        !combo.bank ||
+        combo.bank === '通用/多行' ||
+        combo.bank === '合作银行' ||
+        combo.bank === rule.bank;
+      const channelMatches =
+        !combo.channels?.length ||
+        combo.channels.includes('any') ||
+        effectiveRuleChannel === 'any' ||
+        combo.channels.includes(effectiveRuleChannel);
+
+      if (bankMatches && channelMatches) {
+        for (const cr of combo.rules || []) {
+          if (cr.amount > 0 && amount >= cr.amount && (cr.type === 'daily' || cr.type === 'single')) {
+            if (cr.rewardType === 'points' && cr.reward > 0) {
+              pointsReward += cr.reward;
+              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+${cr.reward}积分)`);
+            } else if (cr.rewardType === 'cash' && cr.reward > 0) {
+              cashbackReward += cr.reward;
+              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+¥${cr.reward})`);
+            } else if (cr.rewardType === 'lottery') {
+              lotteryChances += 1;
+              lotteryValue += cr.reward > 0 ? cr.reward : LOTTERY_RMB_VALUE;
+              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】抽奖机会`);
+            }
+            if (!triggeredActivityNames.includes(combo.name)) {
+              triggeredActivityNames.push(combo.name);
+            }
+          }
+        }
+      }
     }
 
     const pointsValue = pointsReward * POINTS_RMB_RATE;
@@ -367,6 +441,7 @@ export function evaluateRecommendations(
       isBestInstant: false,
       triggersCombo: triggeredMilestones.length > 0,
       triggeredComboDetails: triggeredMilestones,
+      triggeredActivityNames,
       qualifications,
       notes: rule.notes || '',
       ruleRef: rule,
@@ -416,6 +491,7 @@ export function evaluateRecommendations(
           isBestInstant: false,
           triggersCombo: true,
           triggeredComboDetails: [`本笔消费直接促成【${act.name}】达标门槛 ¥${tier.target}！`],
+          triggeredActivityNames: [act.name],
           qualifications: [`当前累计¥${currentSpend} -> 消费后¥${projectedSpend}`],
           notes: act.notes || '消费门槛阶梯奖励',
           ruleRef: act,
@@ -499,9 +575,15 @@ export function calculateAssetMetrics(
   const month = parseInt(monthStr, 10);
   const totalDaysInMonth = new Date(year, month, 0).getDate();
 
-  const actEntries = entries
+  // Deduplicate entries by calendar date (keeping the latest entry per day)
+  const dailyMap = new Map<string, BankAssetEntry>();
+  entries
     .filter(e => e.activityId === activity.id)
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .forEach(e => {
+      dailyMap.set(e.date, e);
+    });
+
+  const actEntries = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 
   const loggedDays = actEntries.length;
   const currentSum = actEntries.reduce((sum, e) => sum + (e.amount || 0), 0);
