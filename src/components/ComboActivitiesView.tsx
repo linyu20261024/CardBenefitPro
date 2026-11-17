@@ -9,10 +9,12 @@ import {
   formatCurrency,
   getLocalDateString,
   getMonthEndDateString,
-  getNowLocalDateTimeString
+  getNowLocalDateTimeString,
+  CARD_TYPE_LABELS,
+  inferCardType
 } from '../utils/engine';
 import { inferBankName } from '../data/initialData';
-import { MilestoneActivity, RewardComboActivity, ActivityTier, ComboRule } from '../types/cardBenefit';
+import { MilestoneActivity, RewardComboActivity, ActivityTier, ComboRule, CardType } from '../types/cardBenefit';
 import {
   Sparkles,
   CheckCircle2,
@@ -57,6 +59,7 @@ export const ComboActivitiesView: React.FC = () => {
     amount: number;
     channel: string;
     bank: string;
+    cardType: CardType;
   } | null>(null);
 
   // Edit Milestone Activity modal
@@ -69,6 +72,8 @@ export const ComboActivitiesView: React.FC = () => {
   const [isNewActivityOpen, setIsNewActivityOpen] = useState(false);
   const [newActivityName, setNewActivityName] = useState('支付宝快捷支付满额达标');
   const [newActivityBank, setNewActivityBank] = useState('支付宝');
+  const [newActivityCardType, setNewActivityCardType] = useState<CardType>('any');
+  const [newActivityIncludedCardTypes, setNewActivityIncludedCardTypes] = useState<CardType[]>(['credit', 'debit']);
   const [newActivityChannel, setNewActivityChannel] = useState('alipay');
   const [newActivityStart, setNewActivityStart] = useState(() => `${getLocalDateString().slice(0, 7)}-01`);
   const [newActivityEnd, setNewActivityEnd] = useState(() => getMonthEndDateString(getLocalDateString().slice(0, 7)));
@@ -155,12 +160,13 @@ export const ComboActivitiesView: React.FC = () => {
 
   const handleQuickSpendSubmit = () => {
     if (!quickSpendModal) return;
-    const { targetActivity, amount, channel, bank } = quickSpendModal;
+    const { targetActivity, amount, channel, bank, cardType } = quickSpendModal;
 
     addFeedbackRecord({
       ruleId: `combo-${Date.now()}`,
       ruleName: `${targetActivity} - 消费推进记账`,
       bank: bank || '合作银行',
+      cardType: cardType || 'any',
       scene: 'any',
       platform: channel === 'alipay' ? 'alipay' : 'bank_app',
       channel: channel || 'any',
@@ -189,6 +195,8 @@ export const ComboActivitiesView: React.FC = () => {
       id: `act-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       name: newActivityName.trim(),
       bank: resolvedBank,
+      cardType: newActivityCardType,
+      includedCardTypes: newActivityIncludedCardTypes.length > 0 ? newActivityIncludedCardTypes : undefined,
       platform: 'any',
       channel: newActivityChannel,
       scene: 'any',
@@ -257,8 +265,10 @@ export const ComboActivitiesView: React.FC = () => {
     if (preset === 'alipay') {
       setNewActivityName('支付宝快捷支付11月满额达标狂欢');
       setNewActivityBank('支付宝');
+      setNewActivityCardType('any');
+      setNewActivityIncludedCardTypes(['credit', 'debit']);
       setNewActivityChannel('alipay');
-      setNewActivityNotes('绑定信用卡快捷支付消费，满1000返5元，满3000送15元，满5000抽大奖88元');
+      setNewActivityNotes('绑定银行卡快捷支付消费，满1000返5元，满3000送15元，满5000抽大奖88元');
       setNewActivityTiers([
         { target: 1000, rewardName: '5元刷卡金', estimatedReward: 5 },
         { target: 3000, rewardName: '15元刷卡金', estimatedReward: 15 },
@@ -267,8 +277,10 @@ export const ComboActivitiesView: React.FC = () => {
     } else if (preset === 'bocom') {
       setNewActivityName('交通银行信用卡累计消费抽奖');
       setNewActivityBank('交通银行');
+      setNewActivityCardType('credit');
+      setNewActivityIncludedCardTypes([]);
       setNewActivityChannel('any');
-      setNewActivityNotes('当月消费满5000元给1次抽奖，满8000元再给1次抽奖机会');
+      setNewActivityNotes('当月信用卡消费满5000元给1次抽奖，满8000元再给1次抽奖机会（数币/储蓄卡不计入）');
       setNewActivityTiers([
         { target: 5000, rewardName: '抽奖机会1次', estimatedReward: 15 },
         { target: 8000, rewardName: '二重抽奖机会', estimatedReward: 20 }
@@ -276,8 +288,10 @@ export const ComboActivitiesView: React.FC = () => {
     } else {
       setNewActivityName('信用卡多倍积分阶梯达标');
       setNewActivityBank('通用/多行');
+      setNewActivityCardType('credit');
+      setNewActivityIncludedCardTypes([]);
       setNewActivityChannel('any');
-      setNewActivityNotes('消费满额赠送海量综合积分');
+      setNewActivityNotes('信用卡消费满额赠送海量综合积分');
       setNewActivityTiers([
         { target: 2000, rewardName: '赠2000积分', estimatedReward: 4 },
         { target: 5000, rewardName: '赠6000积分', estimatedReward: 12 },
@@ -469,6 +483,12 @@ export const ComboActivitiesView: React.FC = () => {
                 ? activity.bank
                 : inferBankName(activity.name);
 
+            const actCardType = inferCardType(activity);
+            const hasExplicitComboTypes = Boolean(activity.includedCardTypes && activity.includedCardTypes.length > 0);
+            const cardScopeLabel = hasExplicitComboTypes
+              ? `组合统计: ${activity.includedCardTypes!.map(t => CARD_TYPE_LABELS[t]).join(' + ')}`
+              : `${CARD_TYPE_LABELS[actCardType]}独立统计`;
+
             const currentSpend = getActivitySpend(activity.name);
             const highestTier = activity.tiers.reduce((max, t) => (t.target > max ? t.target : max), 1);
             const nextTier = activity.tiers.find(t => t.target > currentSpend);
@@ -514,6 +534,19 @@ export const ComboActivitiesView: React.FC = () => {
                         >
                           {displayBank}
                         </span>
+                        <span
+                          className={`px-2 py-0.5 text-2xs font-semibold rounded ${
+                            hasExplicitComboTypes
+                              ? isAlipayQuickpay
+                                ? 'bg-emerald-400/20 text-emerald-200 border border-emerald-400/30'
+                                : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800'
+                              : isAlipayQuickpay
+                              ? 'bg-white/10 text-slate-200'
+                              : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300'
+                          }`}
+                        >
+                          {cardScopeLabel}
+                        </span>
                         {isAlipayQuickpay && (
                           <span className="px-2 py-0.5 text-2xs font-bold bg-amber-400 text-slate-950 rounded">
                             快捷支付
@@ -541,8 +574,9 @@ export const ComboActivitiesView: React.FC = () => {
                         setQuickSpendModal({
                           targetActivity: activity.name,
                           amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
-                          channel: activity.channel === 'any' ? 'alipay' : activity.channel,
-                          bank: displayBank
+                          channel: activity.channel === 'any' ? (actCardType === 'digital_cny' ? 'digital_cny' : 'alipay') : activity.channel,
+                          bank: displayBank,
+                          cardType: actCardType
                         })
                       }
                       className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs ${
@@ -555,7 +589,14 @@ export const ComboActivitiesView: React.FC = () => {
                       <span>记录消费</span>
                     </button>
                     <button
-                      onClick={() => setEditingMilestone({ ...activity, bank: displayBank })}
+                      onClick={() =>
+                        setEditingMilestone({
+                          ...activity,
+                          bank: displayBank,
+                          cardType: actCardType,
+                          includedCardTypes: activity.includedCardTypes || []
+                        })
+                      }
                       className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       title="修改活动规则与阶梯"
                     >
@@ -673,6 +714,12 @@ export const ComboActivitiesView: React.FC = () => {
                 ? combo.bank
                 : inferBankName(combo.name);
 
+            const comboCardType = inferCardType(combo);
+            const hasComboIncluded = Boolean(combo.includedCardTypes && combo.includedCardTypes.length > 0);
+            const comboScopeLabel = hasComboIncluded
+              ? `组合统计: ${combo.includedCardTypes!.map(t => CARD_TYPE_LABELS[t]).join(' + ')}`
+              : `${CARD_TYPE_LABELS[comboCardType]}独立统计`;
+
             return (
               <div
                 key={combo.id}
@@ -691,6 +738,9 @@ export const ComboActivitiesView: React.FC = () => {
                         <span className="px-2 py-0.5 text-2xs font-bold bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 rounded">
                           {displayBank}
                         </span>
+                        <span className="px-2 py-0.5 text-2xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 rounded">
+                          {comboScopeLabel}
+                        </span>
                         <span className="px-2 py-0.5 text-2xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded">
                           打卡连击
                         </span>
@@ -708,7 +758,8 @@ export const ComboActivitiesView: React.FC = () => {
                           targetActivity: combo.name,
                           amount: 16,
                           channel: combo.channels?.[0] || 'alipay',
-                          bank: displayBank
+                          bank: displayBank,
+                          cardType: comboCardType
                         })
                       }
                       className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
@@ -717,7 +768,14 @@ export const ComboActivitiesView: React.FC = () => {
                       <span>打卡记账</span>
                     </button>
                     <button
-                      onClick={() => setEditingCombo({ ...combo, bank: displayBank })}
+                      onClick={() =>
+                        setEditingCombo({
+                          ...combo,
+                          bank: displayBank,
+                          cardType: comboCardType,
+                          includedCardTypes: combo.includedCardTypes || []
+                        })
+                      }
                       className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       title="修改组合连击规则"
                     >
@@ -824,24 +882,47 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
-                <select
-                  value={quickSpendModal.channel}
-                  onChange={e =>
-                    setQuickSpendModal({
-                      ...quickSpendModal,
-                      channel: e.target.value
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                >
-                  <option value="alipay">支付宝快捷支付</option>
-                  <option value="wechat">微信支付</option>
-                  <option value="unionpay">银联云闪付</option>
-                  <option value="bank_app">银行App</option>
-                  <option value="any">不限渠道</option>
-                </select>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费卡种</label>
+                  <select
+                    value={quickSpendModal.cardType}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        cardType: e.target.value as CardType
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡</option>
+                    <option value="debit">储蓄卡/借记卡</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">通用/其他</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
+                  <select
+                    value={quickSpendModal.channel}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        channel: e.target.value
+                      })
+                    }
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="alipay">支付宝快捷支付</option>
+                    <option value="wechat">微信支付</option>
+                    <option value="unionpay">银联云闪付</option>
+                    <option value="transit_code">乘车码</option>
+                    <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">不限渠道</option>
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -898,7 +979,7 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
                   <input
@@ -909,18 +990,63 @@ export const ComboActivitiesView: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">主卡种体系</label>
+                  <select
+                    value={editingMilestone.cardType || 'credit'}
+                    onChange={e => setEditingMilestone({ ...editingMilestone, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡 (独立统计)</option>
+                    <option value="debit">储蓄卡/借记卡 (独立统计)</option>
+                    <option value="digital_cny">数字人民币 (独立统计)</option>
+                    <option value="any">通用/跨卡种</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定渠道</label>
                   <select
                     value={editingMilestone.channel}
                     onChange={e => setEditingMilestone({ ...editingMilestone, channel: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="any">不限渠道</option>
                     <option value="alipay">支付宝快捷支付</option>
                     <option value="wechat">微信支付</option>
                     <option value="unionpay">银联云闪付</option>
+                    <option value="transit_code">乘车码</option>
                     <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Explicit Combo Cross-Card Allowance */}
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                  组合活动特别说明：允许同时计入以下卡种消费
+                  <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {(['credit', 'debit', 'digital_cny'] as CardType[]).map(ct => {
+                    const checked = editingMilestone.includedCardTypes?.includes(ct) || false;
+                    return (
+                      <label key={ct} className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const cur = editingMilestone.includedCardTypes || [];
+                            const next = e.target.checked
+                              ? Array.from(new Set([...cur, ct]))
+                              : cur.filter(x => x !== ct);
+                            setEditingMilestone({ ...editingMilestone, includedCardTypes: next });
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>{CARD_TYPE_LABELS[ct]}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1116,14 +1242,58 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
-                <input
-                  type="text"
-                  value={editingCombo.bank || ''}
-                  onChange={e => setEditingCombo({ ...editingCombo, bank: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
+                  <input
+                    type="text"
+                    value={editingCombo.bank || ''}
+                    onChange={e => setEditingCombo({ ...editingCombo, bank: e.target.value })}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">主卡种体系</label>
+                  <select
+                    value={editingCombo.cardType || 'credit'}
+                    onChange={e => setEditingCombo({ ...editingCombo, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡 (独立统计)</option>
+                    <option value="debit">储蓄卡/借记卡 (独立统计)</option>
+                    <option value="digital_cny">数字人民币 (独立统计)</option>
+                    <option value="any">通用/跨卡种</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                  组合活动特别说明：允许同时计入以下卡种
+                  <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {(['credit', 'debit', 'digital_cny'] as CardType[]).map(ct => {
+                    const checked = editingCombo.includedCardTypes?.includes(ct) || false;
+                    return (
+                      <label key={ct} className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const cur = editingCombo.includedCardTypes || [];
+                            const next = e.target.checked
+                              ? Array.from(new Set([...cur, ct]))
+                              : cur.filter(x => x !== ct);
+                            setEditingCombo({ ...editingCombo, includedCardTypes: next });
+                          }}
+                          className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span>{CARD_TYPE_LABELS[ct]}</span>
+                      </label>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Combo rules editor */}
@@ -1204,10 +1374,10 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* New Activity Modal */}
       {isNewActivityOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
           <form
             onSubmit={handleCreateActivity}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">添加新达标活动</h3>
@@ -1260,7 +1430,7 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行 / 机构</label>
                   <input
@@ -1271,17 +1441,61 @@ export const ComboActivitiesView: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">主卡种体系</label>
+                  <select
+                    value={newActivityCardType}
+                    onChange={e => setNewActivityCardType(e.target.value as CardType)}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡 (独立统计)</option>
+                    <option value="debit">储蓄卡/借记卡 (独立统计)</option>
+                    <option value="digital_cny">数字人民币 (独立统计)</option>
+                    <option value="any">通用/跨卡种</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定支付渠道</label>
                   <select
                     value={newActivityChannel}
                     onChange={e => setNewActivityChannel(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="alipay">支付宝快捷支付</option>
                     <option value="wechat">微信支付</option>
                     <option value="unionpay">银联云闪付</option>
+                    <option value="transit_code">乘车码</option>
+                    <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
                     <option value="any">不限渠道</option>
                   </select>
+                </div>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                  组合活动特别说明：允许同时计入以下卡种消费
+                  <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {(['credit', 'debit', 'digital_cny'] as CardType[]).map(ct => {
+                    const checked = newActivityIncludedCardTypes.includes(ct);
+                    return (
+                      <label key={ct} className="inline-flex items-center gap-1.5 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={e => {
+                            const next = e.target.checked
+                              ? Array.from(new Set([...newActivityIncludedCardTypes, ct]))
+                              : newActivityIncludedCardTypes.filter(x => x !== ct);
+                            setNewActivityIncludedCardTypes(next);
+                          }}
+                          className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span>{CARD_TYPE_LABELS[ct]}</span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
 

@@ -52,7 +52,7 @@ export const INITIAL_FEEDBACK: FeedbackRecord[] = [];
 
 export function getDefaultAppState(): AppState {
   return {
-    version: 5,
+    version: 6,
     rules: INITIAL_RULES,
     activities: INITIAL_ACTIVITIES,
     rewardActivities: INITIAL_REWARD_ACTIVITIES,
@@ -97,7 +97,7 @@ export function getDefaultAppState(): AppState {
 
 export function getEmptyAppState(): AppState {
   return {
-    version: 5,
+    version: 6,
     rules: [],
     activities: [],
     rewardActivities: [],

@@ -47,10 +47,13 @@ export type BenefitType =
   | 'asset_tier'     // 资产日均达标 (如月日均5w送40, 10w更高)
   | 'alipay_quickpay'; // 支付宝快捷支付满额达标
 
+export type CardType = 'credit' | 'debit' | 'digital_cny' | 'any';
+
 export interface InstantRule {
   id: string;
   name: string;
   bank?: string;
+  cardType?: CardType;  // 适用卡种/账户体系 (信用卡/储蓄卡/数字人民币/不限)
   platform: string;
   scene: string;
   scenes?: string[];
@@ -91,6 +94,8 @@ export interface MilestoneActivity {
   id: string;
   name: string;
   bank?: string;
+  cardType?: CardType;          // 主卡种 (数字人民币/储蓄卡/信用卡 彼此默认独立)
+  includedCardTypes?: CardType[]; // 组合活动特别说明时可同时计入的卡种列表
   platform: string;
   channel: string;
   scene: string;
@@ -130,6 +135,8 @@ export interface RewardComboActivity {
   id: string;
   name: string;
   bank?: string;
+  cardType?: CardType;
+  includedCardTypes?: CardType[];
   platform: string;
   scene: string;
   channels: string[];
@@ -172,6 +179,7 @@ export interface FeedbackRecord {
   ruleId: string;
   ruleName: string;
   bank?: string;
+  cardType?: CardType;
   scene: string;
   platform: string;
   channel: string;
@@ -191,6 +199,7 @@ export interface RecommendationResult {
   id: string;
   name: string;
   bank: string;
+  cardType: CardType;
   channel: string;
   scene: string;
   platform: string;

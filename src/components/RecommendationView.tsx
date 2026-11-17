@@ -10,9 +10,10 @@ import {
   formatCurrency,
   formatBigNumber,
   getLocalDateString,
-  getNowLocalDateTimeString
+  getNowLocalDateTimeString,
+  CARD_TYPE_LABELS
 } from '../utils/engine';
-import { RecommendationResult } from '../types/cardBenefit';
+import { RecommendationResult, CardType } from '../types/cardBenefit';
 import {
   Sparkles,
   TrendingUp,
@@ -73,6 +74,34 @@ function getNowTimeString(): string {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 }
 
+const CARD_TYPE_FILTERS: Array<{ id: 'all' | 'credit' | 'debit' | 'digital_cny'; label: string }> = [
+  { id: 'all', label: '全部卡种' },
+  { id: 'credit', label: '信用卡' },
+  { id: 'debit', label: '储蓄卡/借记卡' },
+  { id: 'digital_cny', label: '数字人民币' }
+];
+
+function getCardTypeBadgeClass(cardType: CardType, darkBg = false): string {
+  if (cardType === 'digital_cny') {
+    return darkBg
+      ? 'bg-rose-500/25 text-rose-200 border border-rose-400/30'
+      : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/50';
+  }
+  if (cardType === 'debit') {
+    return darkBg
+      ? 'bg-cyan-500/25 text-cyan-200 border border-cyan-400/30'
+      : 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-900/50';
+  }
+  if (cardType === 'credit') {
+    return darkBg
+      ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-400/30'
+      : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-900/50';
+  }
+  return darkBg
+    ? 'bg-white/10 text-slate-200 border border-white/15'
+    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+}
+
 export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSyncModal }) => {
   const { state, addFeedbackRecord } = useCardBenefit();
 
@@ -88,6 +117,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
   const [selectedScene, setSelectedScene] = useState<string>('subway');
   const [selectedChannel, setSelectedChannel] = useState<string>('any');
   const [selectedBank, setSelectedBank] = useState<string>('all');
+  const [selectedCardType, setSelectedCardType] = useState<'all' | 'credit' | 'debit' | 'digital_cny'>('all');
   const [customTime, setCustomTime] = useState<string>(getNowTimeString);
   const [recordModalData, setRecordModalData] = useState<{
     result: RecommendationResult;
@@ -107,6 +137,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
         scene: selectedScene,
         channel: selectedChannel,
         bank: selectedBank,
+        cardType: selectedCardType === 'all' ? undefined : selectedCardType,
         currentTime: customTime,
         currentDate: getLocalDateString()
       },
@@ -115,7 +146,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       state.rewardActivities,
       state.feedback
     );
-  }, [parsedAmount, selectedScene, selectedChannel, selectedBank, customTime, state.rules, state.activities, state.rewardActivities, state.feedback]);
+  }, [parsedAmount, selectedScene, selectedChannel, selectedBank, selectedCardType, customTime, state.rules, state.activities, state.rewardActivities, state.feedback]);
 
   const eligibleRecommendations = useMemo(() => {
     return recommendations.filter(r => r.isEligible);
@@ -151,6 +182,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       ruleId: result.id,
       ruleName: result.name,
       bank: result.bank,
+      cardType: result.cardType,
       scene: selectedScene,
       platform: result.platform,
       channel: result.channel,
@@ -297,8 +329,31 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
           </div>
         </div>
 
-        {/* Row 4: Bank Filter - Compact */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+        {/* Row 4: CardType & Bank Filter - Compact */}
+        <div className="flex flex-col gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+              <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">卡种体系:</span>
+              {CARD_TYPE_FILTERS.map(ct => (
+                <button
+                  key={ct.id}
+                  type="button"
+                  onClick={() => setSelectedCardType(ct.id)}
+                  className={`px-2 py-0.5 text-xs rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                    selectedCardType === ct.id
+                      ? 'bg-indigo-600 text-white font-semibold'
+                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  {ct.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-2xs sm:text-xs text-slate-400 font-mono shrink-0">
+              匹配到 {recommendations.length} 项方案
+            </span>
+          </div>
+
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
             <span className="font-semibold text-slate-700 dark:text-slate-300 shrink-0">机构:</span>
             {availableBanks.map(b => (
@@ -316,9 +371,6 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
               </button>
             ))}
           </div>
-          <span className="text-2xs sm:text-xs text-slate-400 font-mono self-end sm:self-auto shrink-0">
-            匹配到 {recommendations.length} 项方案
-          </span>
         </div>
       </div>
 
@@ -364,6 +416,9 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     <Sparkles className="w-3 h-3 fill-current" />
                     <span>首推最优</span>
                   </div>
+                  <span className={`px-2 py-0.5 text-2xs font-semibold rounded-md ${getCardTypeBadgeClass(bestPick.cardType, true)}`}>
+                    {CARD_TYPE_LABELS[bestPick.cardType]}
+                  </span>
                   <span className="text-2xs sm:text-xs text-slate-300 font-medium">
                     综合回报 {bestPick.effectiveDiscountRate}%
                   </span>
@@ -497,14 +552,19 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                   >
                     <div>
                       <div className="flex items-center justify-between gap-1.5 mb-1">
-                        <span className="text-2xs sm:text-xs font-semibold text-slate-500 dark:text-slate-400">
+                        <span className="text-2xs sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
                           {rec.bank} · {rec.channel}
                         </span>
-                        {rec.isBestInstant && (
-                          <span className="px-1.5 py-0.5 text-3xs sm:text-2xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded">
-                            立减最高
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className={`px-1.5 py-0.5 text-3xs font-semibold rounded ${getCardTypeBadgeClass(rec.cardType)}`}>
+                            {CARD_TYPE_LABELS[rec.cardType]}
                           </span>
-                        )}
+                          {rec.isBestInstant && (
+                            <span className="px-1.5 py-0.5 text-3xs sm:text-2xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 rounded">
+                              立减最高
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white line-clamp-1">
@@ -580,12 +640,17 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400">
+                          <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 truncate">
                             {rec.bank} · {rec.channel}
                           </span>
-                          <span className="text-3xs px-1.5 py-0.5 rounded font-mono font-medium bg-amber-100/60 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
-                            当前未生效
-                          </span>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <span className={`px-1.5 py-0.5 text-3xs font-semibold rounded ${getCardTypeBadgeClass(rec.cardType)}`}>
+                              {CARD_TYPE_LABELS[rec.cardType]}
+                            </span>
+                            <span className="text-3xs px-1.5 py-0.5 rounded font-mono font-medium bg-amber-100/60 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+                              当前未生效
+                            </span>
+                          </div>
                         </div>
 
                         <h4 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-200 line-clamp-1">
@@ -678,8 +743,12 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                 <div className="font-semibold text-slate-900 dark:text-white text-sm">
                   {recordModalData.result.name}
                 </div>
-                <div className="text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                <div className="text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-2">
                   <span>{recordModalData.result.bank}</span>
+                  <span>·</span>
+                  <span className={`px-1.5 py-0.5 text-3xs font-semibold rounded ${getCardTypeBadgeClass(recordModalData.result.cardType)}`}>
+                    {CARD_TYPE_LABELS[recordModalData.result.cardType]}
+                  </span>
                   <span>·</span>
                   <span>渠道: {recordModalData.result.channel}</span>
                 </div>

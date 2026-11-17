@@ -14,7 +14,12 @@ import {
   FeedbackRecord
 } from '../types/cardBenefit';
 import { getDefaultAppState, getEmptyAppState, inferBankName } from '../data/initialData';
-import { getLocalDateString } from '../utils/engine';
+import {
+  getLocalDateString,
+  inferCardType,
+  isCardTypeCompatible,
+  normalizeKey
+} from '../utils/engine';
 
 const STORAGE_KEY = 'card_benefit_pro_user_data';
 
@@ -53,6 +58,95 @@ interface CardBenefitContextType {
 
 const CardBenefitContext = createContext<CardBenefitContextType | undefined>(undefined);
 
+function reconcileIncompatibleActivitySpend(
+  rules: InstantRule[],
+  activities: MilestoneActivity[],
+  rewardActivities: RewardComboActivity[],
+  feedback: FeedbackRecord[]
+): { activities: MilestoneActivity[]; feedback: FeedbackRecord[] } {
+  const spendReductionByActId: Record<string, number> = {};
+
+  const cleanedFeedback = (feedback || []).map(f => {
+    const matchedRule = rules.find(
+      r => (f.ruleId && r.id === f.ruleId) || (r.name && f.ruleName && r.name === f.ruleName)
+    );
+    const fCardType =
+      f.cardType ||
+      (matchedRule
+        ? inferCardType(matchedRule)
+        : inferCardType({
+            name: f.ruleName,
+            notes: f.note,
+            platform: f.platform,
+            channel: f.channel
+          }));
+    const fChannel = normalizeKey(matchedRule?.channel || f.channel) || 'any';
+    const fScene = normalizeKey(matchedRule?.scene || f.scene) || 'any';
+    const fBank = matchedRule?.bank || f.bank;
+
+    if (!f.contributedActivities || f.contributedActivities.length === 0) {
+      return f.cardType ? f : { ...f, cardType: fCardType };
+    }
+
+    const validContributed = f.contributedActivities.filter(actName => {
+      const act = activities.find(a => a.name === actName);
+      if (act) {
+        const actCardType = inferCardType(act);
+        const cardOk = isCardTypeCompatible(fCardType, actCardType, act.includedCardTypes, act.bank);
+        const normActChannel = normalizeKey(act.channel) || 'any';
+        const channelOk =
+          normActChannel === 'any' || (fChannel !== 'any' && normActChannel === fChannel);
+        const normActScene = normalizeKey(act.scene) || 'any';
+        const sceneOk =
+          normActScene === 'any' || fScene === 'any' || normActScene === fScene;
+        const bankOk =
+          act.bank === '通用/多行' ||
+          act.bank === '不限' ||
+          !act.bank ||
+          act.bank === fBank ||
+          (act.bank === '支付宝' && fChannel === 'alipay' && fCardType !== 'digital_cny');
+
+        if (!cardOk || !channelOk || !sceneOk || !bankOk) {
+          spendReductionByActId[act.id] = (spendReductionByActId[act.id] || 0) + (f.amount || 0);
+          return false;
+        }
+        return true;
+      }
+
+      const combo = rewardActivities.find(c => c.name === actName);
+      if (combo) {
+        const comboCardType = inferCardType(combo);
+        return isCardTypeCompatible(fCardType, comboCardType, combo.includedCardTypes, combo.bank);
+      }
+
+      return true;
+    });
+
+    return {
+      ...f,
+      cardType: f.cardType || fCardType,
+      contributedActivities: validContributed
+    };
+  });
+
+  const cleanedActivities = (activities || []).map(act => {
+    const reduction = spendReductionByActId[act.id] || 0;
+    if (reduction > 0) {
+      const nextSpend = Math.max(0, Number(((act.currentSpend || 0) - reduction).toFixed(2)));
+      return {
+        ...act,
+        currentSpend: nextSpend
+      };
+    }
+    return act;
+  });
+
+  return {
+    activities: cleanedActivities,
+    feedback: cleanedFeedback
+  };
+}
+
 export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [state, setState] = useState<AppState>(() => {
     try {
@@ -78,6 +172,17 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
               bank: ra.bank || inferBankName(ra.name || '')
             }));
           }
+          if ((parsed.version || 0) < 6) {
+            const reconciled = reconcileIncompatibleActivitySpend(
+              parsed.rules || [],
+              parsed.activities || [],
+              parsed.rewardActivities || [],
+              parsed.feedback || []
+            );
+            parsed.activities = reconciled.activities;
+            parsed.feedback = reconciled.feedback;
+            parsed.version = 6;
+          }
           return parsed;
         }
       }
@@ -98,13 +203,34 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, [state]);
 
   const addFeedbackRecord = (record: Omit<FeedbackRecord, 'id' | 'feedbackAt'>) => {
-    const newRecord: FeedbackRecord = {
-      ...record,
-      id: `feed-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-      feedbackAt: new Date().toISOString()
-    };
-
     setState(prev => {
+      const matchedRule = prev.rules.find(
+        r => (record.ruleId && r.id === record.ruleId) || (r.name && record.ruleName && r.name === record.ruleName)
+      );
+      const recordCardType =
+        record.cardType ||
+        (matchedRule ? inferCardType(matchedRule) : inferCardType(record));
+
+      const filteredContributed = (record.contributedActivities || []).filter(actName => {
+        const act = prev.activities.find(a => a.name === actName);
+        if (act) {
+          return isCardTypeCompatible(recordCardType, inferCardType(act), act.includedCardTypes, act.bank);
+        }
+        const combo = prev.rewardActivities.find(c => c.name === actName);
+        if (combo) {
+          return isCardTypeCompatible(recordCardType, inferCardType(combo), combo.includedCardTypes, combo.bank);
+        }
+        return true;
+      });
+
+      const newRecord: FeedbackRecord = {
+        ...record,
+        cardType: recordCardType,
+        contributedActivities: filteredContributed,
+        id: `feed-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+        feedbackAt: new Date().toISOString()
+      };
+
       // Also increment usedCount on rule if applicable
       const updatedRules = prev.rules.map(r => {
         if (r.id === record.ruleId) {
@@ -116,9 +242,12 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         return r;
       });
 
-      // Update current spend on matching activities
+      // Update current spend on matching and card-type-compatible activities
       const updatedActivities = prev.activities.map(act => {
-        if (record.contributedActivities && record.contributedActivities.includes(act.name)) {
+        if (
+          filteredContributed.includes(act.name) &&
+          isCardTypeCompatible(recordCardType, inferCardType(act), act.includedCardTypes, act.bank)
+        ) {
           return {
             ...act,
             currentSpend: (act.currentSpend || 0) + record.amount
@@ -380,14 +509,23 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         bank: ra.bank || inferBankName(ra.name || '')
       }));
 
+      const mergedFeedback = targetState.feedback || [];
+      const reconciled = reconcileIncompatibleActivitySpend(
+        mergedRules,
+        mergedActivities,
+        mergedRewardActivities,
+        mergedFeedback
+      );
+
       setState(prev => ({
         ...prev,
+        version: 6,
         rules: mergedRules.length > 0 ? mergedRules : prev.rules,
-        activities: mergedActivities.length > 0 ? mergedActivities : prev.activities,
+        activities: reconciled.activities.length > 0 ? reconciled.activities : prev.activities,
         rewardActivities: mergedRewardActivities.length > 0 ? mergedRewardActivities : prev.rewardActivities,
         bankAssetActivities: targetState.bankAssetActivities || prev.bankAssetActivities,
         bankAssetEntries: targetState.bankAssetEntries || prev.bankAssetEntries,
-        feedback: targetState.feedback || prev.feedback,
+        feedback: targetState.feedback ? reconciled.feedback : prev.feedback,
         lastUpdated: new Date().toISOString()
       }));
 
@@ -404,11 +542,12 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
     // Generate compatible backup format with both original fields and enhanced models
     const exportObject = {
       backupFormat: "card-recommender-backup",
-      backupVersion: 5,
-      appVersion: 5,
+      backupVersion: 6,
+      appVersion: 6,
       exportedAt: new Date().toISOString(),
       state: {
         ...state,
+        version: 6,
         lastUpdated: new Date().toISOString()
       },
       customPlatforms: state.customPlatforms,

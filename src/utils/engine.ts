@@ -10,7 +10,8 @@ import {
   RecommendationResult,
   BankAssetActivity,
   BankAssetEntry,
-  FeedbackRecord
+  FeedbackRecord,
+  CardType
 } from '../types/cardBenefit';
 
 export interface RecommendationQuery {
@@ -19,8 +20,128 @@ export interface RecommendationQuery {
   channel: string;
   platform?: string;
   bank?: string;
+  cardType?: CardType;
   currentTime?: string; // HH:mm
   currentDate?: string; // YYYY-MM-DD
+}
+
+export const CARD_TYPE_LABELS: Record<CardType, string> = {
+  credit: '信用卡',
+  debit: '储蓄卡',
+  digital_cny: '数字人民币',
+  any: '通用/组合'
+};
+
+export function normalizeKey(val?: string): string {
+  return (val || '').trim().toLowerCase().replace(/-/g, '_');
+}
+
+/**
+ * Infers the card/account instrument type (信用卡 / 储蓄卡 / 数字人民币 / 通用组合).
+ * Digital RMB, debit cards, and credit cards are independent by default.
+ */
+export function inferCardType(item: {
+  cardType?: CardType;
+  name?: string;
+  notes?: string;
+  platform?: string;
+  channel?: string;
+  channels?: string[];
+}): CardType {
+  if (item.cardType) {
+    return item.cardType;
+  }
+
+  const normChannel = normalizeKey(item.channel);
+  const normPlatform = normalizeKey(item.platform);
+  const channelsList = (item.channels || []).map(c => normalizeKey(c));
+  const text = `${item.name || ''} ${item.notes || ''} ${item.platform || ''}`;
+
+  const mentionsDigitalCny =
+    normChannel === 'digital_cny' ||
+    normPlatform === 'digital_cny' ||
+    (channelsList.length > 0 && channelsList.every(c => c === 'digital_cny')) ||
+    text.includes('数币') ||
+    text.includes('数字人民币');
+
+  const mentionsCredit =
+    text.includes('信用卡') ||
+    text.includes('贷记卡') ||
+    text.includes('最红') ||
+    text.includes('刷卡金') ||
+    text.includes('直通车') ||
+    text.includes('龙卡') ||
+    text.includes('买单吧') ||
+    text.includes('阳光惠生活') ||
+    text.includes('动卡空间') ||
+    text.includes('掌上生活') ||
+    text.includes('发现精彩') ||
+    text.includes('缤纷生活') ||
+    text.includes('口袋银行') ||
+    text.includes('好兴动') ||
+    text.includes('多倍积分') ||
+    text.includes('三倍积分');
+
+  const mentionsDebit =
+    text.includes('储蓄卡') ||
+    text.includes('借记卡') ||
+    text.includes('工资卡');
+
+  if (mentionsDigitalCny && !mentionsCredit && !mentionsDebit) {
+    return 'digital_cny';
+  }
+  if (mentionsDebit && !mentionsCredit && !mentionsDigitalCny) {
+    return 'debit';
+  }
+  if (mentionsCredit && !mentionsDebit && !mentionsDigitalCny) {
+    return 'credit';
+  }
+
+  return 'any';
+}
+
+/**
+ * Checks whether a rule/transaction's cardType may contribute to an activity's cardType.
+ * By default, digital_cny / debit / credit are strictly isolated unless an activity explicitly declares includedCardTypes.
+ */
+export function isCardTypeCompatible(
+  ruleCardType: CardType,
+  actCardType: CardType,
+  actIncludedCardTypes?: CardType[],
+  actBank?: string
+): boolean {
+  // 1. Explicit combo activity specifying participating card types
+  if (actIncludedCardTypes && actIncludedCardTypes.length > 0) {
+    if (ruleCardType === 'any') {
+      return actIncludedCardTypes.includes('any') || actIncludedCardTypes.some(t => t !== 'digital_cny');
+    }
+    return actIncludedCardTypes.includes(ruleCardType) || actIncludedCardTypes.includes('any');
+  }
+
+  // 2. Digital RMB is strictly isolated from non-digital_cny activities
+  if (ruleCardType === 'digital_cny' || actCardType === 'digital_cny') {
+    return ruleCardType === 'digital_cny' && actCardType === 'digital_cny';
+  }
+
+  // 3. Debit and Credit are strictly isolated from each other
+  if (ruleCardType === 'debit' && actCardType === 'credit') return false;
+  if (ruleCardType === 'credit' && actCardType === 'debit') return false;
+
+  // 4. Payment platform milestones (e.g. 支付宝快捷支付) without card restriction allow credit/debit bank cards
+  const isPaymentPlatformAct = actBank === '支付宝' || actBank === '微信支付' || actBank === '银联云闪付';
+  if (isPaymentPlatformAct && actCardType === 'any') {
+    return ruleCardType === 'credit' || ruleCardType === 'debit' || ruleCardType === 'any';
+  }
+
+  if (ruleCardType !== 'any' && actCardType !== 'any') {
+    return ruleCardType === actCardType;
+  }
+
+  // Keep debit isolated from generic bank activities unless explicitly allowed
+  if (ruleCardType === 'debit' && actCardType === 'any') return false;
+  if (actCardType === 'debit' && ruleCardType === 'any') return false;
+
+  return true;
 }
 
 // Valuation rate: 10,000 points = 15 RMB
@@ -160,11 +281,15 @@ export function evaluateRecommendations(
     scene,
     channel,
     bank,
+    cardType,
     currentTime = '08:30',
     currentDate = getLocalDateString()
   } = query;
 
   if (amount <= 0) return [];
+
+  const normQueryScene = normalizeKey(scene) || 'any';
+  const normQueryChannel = normalizeKey(channel) || 'any';
 
   const results: RecommendationResult[] = [];
 
@@ -175,21 +300,32 @@ export function evaluateRecommendations(
     // Bank filter
     if (bank && bank !== 'all' && rule.bank !== bank) continue;
 
-    // Scene match
+    // Card type inference & filter
+    const ruleCardType = inferCardType(rule);
+    if (cardType && cardType !== 'any') {
+      if (cardType === 'digital_cny' && ruleCardType !== 'digital_cny') continue;
+      if (cardType === 'debit' && ruleCardType !== 'debit') continue;
+      if (cardType === 'credit' && ruleCardType !== 'credit' && ruleCardType !== 'any') continue;
+    }
+
+    // Scene match (normalized)
+    const normRuleScene = normalizeKey(rule.scene) || 'any';
     const sceneMatch =
-      rule.scene === 'any' ||
-      scene === 'any' ||
-      rule.scene === scene ||
-      (rule.scenes && rule.scenes.includes(scene));
+      normRuleScene === 'any' ||
+      normQueryScene === 'any' ||
+      normRuleScene === normQueryScene ||
+      (rule.scenes && rule.scenes.some(s => normalizeKey(s) === normQueryScene));
     if (!sceneMatch) continue;
 
-    // Channel match
+    // Channel match (normalized, keeping digital_cny distinct from alipay/unionpay)
+    const normRuleChannel = normalizeKey(rule.channel) || 'any';
     const channelMatch =
-      rule.channel === 'any' ||
-      channel === 'any' ||
-      rule.channel === channel ||
-      (rule.channel === 'alipay' && channel === 'transit_code') || // transit codes often use alipay
-      (rule.channel === 'transit_code' && (channel === 'alipay' || channel === 'unionpay'));
+      normRuleChannel === 'any' ||
+      normQueryChannel === 'any' ||
+      normRuleChannel === normQueryChannel ||
+      (normQueryChannel === 'digital_cny' && ruleCardType === 'digital_cny') ||
+      (normRuleChannel === 'alipay' && normQueryChannel === 'transit_code' && ruleCardType !== 'digital_cny') ||
+      (normRuleChannel === 'transit_code' && ruleCardType !== 'digital_cny' && (normQueryChannel === 'alipay' || normQueryChannel === 'unionpay'));
     if (!channelMatch) continue;
 
     // Evaluate eligibility
@@ -346,7 +482,9 @@ export function evaluateRecommendations(
     }
 
     // Check real active MilestoneActivities & RewardComboActivities in state
-    const effectiveRuleChannel = rule.channel === 'any' ? channel : rule.channel;
+    // Enforce strict CardType isolation (digital_cny / debit / credit are independent unless explicitly combined)
+    const effectiveRuleChannel = normRuleChannel === 'any' ? normQueryChannel : normRuleChannel;
+    const effectiveRuleScene = normRuleScene === 'any' ? normQueryScene : normRuleScene;
 
     for (const act of activities) {
       const actEndDate = extractDateStr(act.end);
@@ -354,27 +492,40 @@ export function evaluateRecommendations(
       if (actEndDate && curDateStr > actEndDate) continue;
       if (actStartDate && curDateStr < actStartDate) continue;
 
-      const bankMatches =
-        !act.bank ||
-        act.bank === '通用/多行' ||
-        act.bank === '合作银行' ||
-        act.bank === rule.bank ||
-        (act.bank === '支付宝' && (effectiveRuleChannel === 'alipay' || rule.channel === 'alipay'));
-      const channelMatches =
-        act.channel === 'any' ||
-        effectiveRuleChannel === 'any' ||
-        act.channel === effectiveRuleChannel;
+      const actCardType = inferCardType(act);
+      if (!isCardTypeCompatible(ruleCardType, actCardType, act.includedCardTypes, act.bank)) {
+        continue;
+      }
 
-      if (bankMatches && channelMatches) {
-        const curSpend = act.currentSpend || 0;
-        const nextHitTier = act.tiers.find(t => curSpend < t.target && curSpend + amount >= t.target);
-        if (nextHitTier) {
-          triggeredMilestones.push(`叠加推进【${act.name}】达标¥${nextHitTier.target} (${nextHitTier.rewardName})`);
-          triggeredActivityNames.push(act.name);
-        } else if (act.tiers.some(t => curSpend < t.target)) {
-          triggeredMilestones.push(`计入【${act.name}】累计消费`);
-          triggeredActivityNames.push(act.name);
-        }
+      const bankMatches =
+        act.bank === '通用/多行' ||
+        act.bank === '不限' ||
+        (Boolean(act.bank) && act.bank === rule.bank) ||
+        (act.bank === '支付宝' && effectiveRuleChannel === 'alipay' && ruleCardType !== 'digital_cny');
+      if (!bankMatches) continue;
+
+      const normActChannel = normalizeKey(act.channel) || 'any';
+      const channelMatches =
+        normActChannel === 'any' ||
+        (effectiveRuleChannel !== 'any' && normActChannel === effectiveRuleChannel);
+      if (!channelMatches) continue;
+
+      const normActScene = normalizeKey(act.scene) || 'any';
+      const sceneMatches =
+        normActScene === 'any' ||
+        effectiveRuleScene === 'any' ||
+        normActScene === effectiveRuleScene ||
+        (rule.scenes && rule.scenes.some(s => normalizeKey(s) === normActScene));
+      if (!sceneMatches) continue;
+
+      const curSpend = act.currentSpend || 0;
+      const nextHitTier = act.tiers.find(t => curSpend < t.target && curSpend + amount >= t.target);
+      if (nextHitTier) {
+        triggeredMilestones.push(`叠加推进【${act.name}】达标¥${nextHitTier.target} (${nextHitTier.rewardName})`);
+        triggeredActivityNames.push(act.name);
+      } else if (act.tiers.some(t => curSpend < t.target)) {
+        triggeredMilestones.push(`计入【${act.name}】累计消费`);
+        triggeredActivityNames.push(act.name);
       }
     }
 
@@ -384,34 +535,47 @@ export function evaluateRecommendations(
       if (comboEndDate && curDateStr > comboEndDate) continue;
       if (comboStartDate && curDateStr < comboStartDate) continue;
 
-      const bankMatches =
-        !combo.bank ||
-        combo.bank === '通用/多行' ||
-        combo.bank === '合作银行' ||
-        combo.bank === rule.bank;
-      const channelMatches =
-        !combo.channels?.length ||
-        combo.channels.includes('any') ||
-        effectiveRuleChannel === 'any' ||
-        combo.channels.includes(effectiveRuleChannel);
+      const comboCardType = inferCardType(combo);
+      if (!isCardTypeCompatible(ruleCardType, comboCardType, combo.includedCardTypes, combo.bank)) {
+        continue;
+      }
 
-      if (bankMatches && channelMatches) {
-        for (const cr of combo.rules || []) {
-          if (cr.amount > 0 && amount >= cr.amount && (cr.type === 'daily' || cr.type === 'single')) {
-            if (cr.rewardType === 'points' && cr.reward > 0) {
-              pointsReward += cr.reward;
-              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+${cr.reward}积分)`);
-            } else if (cr.rewardType === 'cash' && cr.reward > 0) {
-              cashbackReward += cr.reward;
-              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+¥${cr.reward})`);
-            } else if (cr.rewardType === 'lottery') {
-              lotteryChances += 1;
-              lotteryValue += cr.reward > 0 ? cr.reward : LOTTERY_RMB_VALUE;
-              triggeredMilestones.push(`触发【${combo.name}·${cr.name}】抽奖机会`);
-            }
-            if (!triggeredActivityNames.includes(combo.name)) {
-              triggeredActivityNames.push(combo.name);
-            }
+      const bankMatches =
+        combo.bank === '通用/多行' ||
+        combo.bank === '不限' ||
+        (Boolean(combo.bank) && combo.bank === rule.bank);
+      if (!bankMatches) continue;
+
+      const normComboChannels = (combo.channels || []).map(c => normalizeKey(c));
+      const channelMatches =
+        normComboChannels.length === 0 ||
+        normComboChannels.includes('any') ||
+        (effectiveRuleChannel !== 'any' && normComboChannels.includes(effectiveRuleChannel));
+      if (!channelMatches) continue;
+
+      const normComboScene = normalizeKey(combo.scene) || 'any';
+      const sceneMatches =
+        normComboScene === 'any' ||
+        effectiveRuleScene === 'any' ||
+        normComboScene === effectiveRuleScene ||
+        (rule.scenes && rule.scenes.some(s => normalizeKey(s) === normComboScene));
+      if (!sceneMatches) continue;
+
+      for (const cr of combo.rules || []) {
+        if (cr.amount > 0 && amount >= cr.amount && (cr.type === 'daily' || cr.type === 'single')) {
+          if (cr.rewardType === 'points' && cr.reward > 0) {
+            pointsReward += cr.reward;
+            triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+${cr.reward}积分)`);
+          } else if (cr.rewardType === 'cash' && cr.reward > 0) {
+            cashbackReward += cr.reward;
+            triggeredMilestones.push(`触发【${combo.name}·${cr.name}】(+¥${cr.reward})`);
+          } else if (cr.rewardType === 'lottery') {
+            lotteryChances += 1;
+            lotteryValue += cr.reward > 0 ? cr.reward : LOTTERY_RMB_VALUE;
+            triggeredMilestones.push(`触发【${combo.name}·${cr.name}】抽奖机会`);
+          }
+          if (!triggeredActivityNames.includes(combo.name)) {
+            triggeredActivityNames.push(combo.name);
           }
         }
       }
@@ -425,6 +589,7 @@ export function evaluateRecommendations(
       id: rule.id,
       name: rule.name,
       bank: rule.bank || '通用银行',
+      cardType: ruleCardType,
       channel: rule.channel,
       scene: rule.scene,
       platform: rule.platform,
@@ -460,7 +625,24 @@ export function evaluateRecommendations(
     if (actStartDate && curDateStr < actStartDate) continue;
 
     if (bank && bank !== 'all' && act.bank !== bank) continue;
-    if (act.channel !== 'any' && channel !== 'any' && act.channel !== channel) continue;
+
+    const actCardType = inferCardType(act);
+    if (cardType && cardType !== 'any' && !isCardTypeCompatible(cardType, actCardType, act.includedCardTypes, act.bank)) {
+      continue;
+    }
+
+    const normActChannel = normalizeKey(act.channel) || 'any';
+    if (normQueryChannel === 'digital_cny' && actCardType !== 'digital_cny' && !act.includedCardTypes?.includes('digital_cny')) {
+      continue;
+    }
+    if (normActChannel !== 'any' && normQueryChannel !== 'any' && normActChannel !== normQueryChannel) {
+      continue;
+    }
+
+    const normActScene = normalizeKey(act.scene) || 'any';
+    if (normActScene !== 'any' && normQueryScene !== 'any' && normActScene !== normQueryScene) {
+      continue;
+    }
 
     // Check if current spend + amount reaches an unconfirmed tier
     const currentSpend = act.currentSpend || 0;
@@ -475,6 +657,7 @@ export function evaluateRecommendations(
           id: `${act.id}-${tier.id}`,
           name: `${act.name} (满¥${tier.target}阶梯达成)`,
           bank: act.bank || '合作银行',
+          cardType: actCardType,
           channel: act.channel,
           scene: act.scene,
           platform: act.platform,

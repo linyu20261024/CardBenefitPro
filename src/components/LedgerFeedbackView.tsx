@@ -10,9 +10,11 @@ import {
   calculateRuleUsage,
   getLocalDateString,
   getNowLocalDateTimeString,
-  getMonthEndDateString
+  getMonthEndDateString,
+  CARD_TYPE_LABELS,
+  inferCardType
 } from '../utils/engine';
-import { FeedbackRecord, InstantRule } from '../types/cardBenefit';
+import { FeedbackRecord, InstantRule, CardType } from '../types/cardBenefit';
 import {
   History,
   Plus,
@@ -29,12 +31,26 @@ import {
   Calendar
 } from 'lucide-react';
 
+function getCardTypeBadgeClass(cardType: CardType): string {
+  if (cardType === 'digital_cny') {
+    return 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/50';
+  }
+  if (cardType === 'debit') {
+    return 'bg-cyan-50 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-300 border border-cyan-200/70 dark:border-cyan-900/50';
+  }
+  if (cardType === 'credit') {
+    return 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-900/50';
+  }
+  return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
+}
+
 function getDefaultNewRuleState(): Partial<InstantRule> {
   const today = getLocalDateString();
   const month = today.slice(0, 7);
   return {
     name: '',
     bank: '交通银行',
+    cardType: 'credit',
     platform: 'transport',
     scene: 'subway',
     channel: 'alipay',
@@ -89,6 +105,7 @@ export const LedgerFeedbackView: React.FC = () => {
   const [newFeedbackData, setNewFeedbackData] = useState({
     ruleName: '自定义优惠消费',
     bank: '交通银行',
+    cardType: 'credit' as CardType,
     scene: 'subway',
     platform: 'transport',
     channel: 'alipay',
@@ -128,6 +145,7 @@ export const LedgerFeedbackView: React.FC = () => {
       ruleId: `custom-${Date.now()}`,
       ruleName: newFeedbackData.ruleName,
       bank: newFeedbackData.bank,
+      cardType: newFeedbackData.cardType,
       scene: newFeedbackData.scene,
       platform: newFeedbackData.platform,
       channel: newFeedbackData.channel,
@@ -164,6 +182,11 @@ export const LedgerFeedbackView: React.FC = () => {
       id: `rule-${Date.now()}`,
       name: newRuleData.name,
       bank: newRuleData.bank,
+      cardType: (newRuleData.cardType as CardType) || inferCardType({
+        name: newRuleData.name,
+        channel: newRuleData.channel,
+        notes: newRuleData.notes
+      }),
       platform: newRuleData.platform || 'any',
       scene: newRuleData.scene || 'any',
       scenes: [newRuleData.scene || 'any'],
@@ -196,6 +219,7 @@ export const LedgerFeedbackView: React.FC = () => {
     setEditingRule(rule);
     setEditRuleData({
       ...rule,
+      cardType: rule.cardType || inferCardType(rule),
       dailyLimit: rule.dailyLimit ?? (rule.limitPeriod === 'day' ? rule.limit : null),
       weeklyLimit: rule.weeklyLimit ?? (rule.limitPeriod === 'week' ? rule.limit : null),
       monthlyLimit: rule.monthlyLimit ?? (rule.limitPeriod === 'month' ? rule.limit : null),
@@ -341,16 +365,26 @@ export const LedgerFeedbackView: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredFeedback.map(item => (
+                  filteredFeedback.map(item => {
+                    const itemCardType = item.cardType || inferCardType({
+                      name: item.ruleName,
+                      notes: item.note,
+                      platform: item.platform,
+                      channel: item.channel
+                    });
+                    return (
                     <tr key={item.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                       <td className="py-3 px-4 text-slate-500 whitespace-nowrap">
                         {item.when?.replace('T', ' ') || item.feedbackAt?.slice(0, 10)}
                       </td>
                       <td className="py-3 px-4 font-sans font-medium text-slate-900 dark:text-white max-w-xs truncate">
-                        {item.ruleName}
+                        <div className="truncate">{item.ruleName}</div>
                       </td>
                       <td className="py-3 px-4 font-sans text-slate-700 dark:text-slate-300">
-                        {item.bank || '合作银行'}
+                        <div>{item.bank || '合作银行'}</div>
+                        <span className={`inline-block mt-0.5 px-1.5 py-0.2 text-3xs font-semibold rounded ${getCardTypeBadgeClass(itemCardType)}`}>
+                          {CARD_TYPE_LABELS[itemCardType]}
+                        </span>
                       </td>
                       <td className="py-3 px-4 font-sans text-slate-500">
                         {item.channel}
@@ -367,7 +401,7 @@ export const LedgerFeedbackView: React.FC = () => {
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
-                            onClick={() => setEditingFeedback({ ...item })}
+                            onClick={() => setEditingFeedback({ ...item, cardType: itemCardType })}
                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-1"
                             title="编辑记录"
                           >
@@ -383,7 +417,8 @@ export const LedgerFeedbackView: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
@@ -416,7 +451,9 @@ export const LedgerFeedbackView: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                  filteredRules.map(rule => (
+                  filteredRules.map(rule => {
+                    const ruleCardType = inferCardType(rule);
+                    return (
                     <tr
                       key={rule.id}
                       className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/40 ${
@@ -437,7 +474,12 @@ export const LedgerFeedbackView: React.FC = () => {
                         </button>
                       </td>
                       <td className="py-3 px-4 font-medium text-slate-900 dark:text-white">
-                        <div>{rule.name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{rule.name}</span>
+                          <span className={`px-1.5 py-0.2 text-3xs font-semibold rounded ${getCardTypeBadgeClass(ruleCardType)}`}>
+                            {CARD_TYPE_LABELS[ruleCardType]}
+                          </span>
+                        </div>
                         {rule.notes && (
                           <div className="text-3xs text-slate-400 line-clamp-1">{rule.notes}</div>
                         )}
@@ -581,7 +623,8 @@ export const LedgerFeedbackView: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
@@ -619,7 +662,7 @@ export const LedgerFeedbackView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构</label>
                   <input
@@ -630,17 +673,33 @@ export const LedgerFeedbackView: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">卡种体系</label>
+                  <select
+                    value={newFeedbackData.cardType}
+                    onChange={e => setNewFeedbackData({ ...newFeedbackData, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡</option>
+                    <option value="debit">储蓄卡/借记卡</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">通用/组合</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                   <select
                     value={newFeedbackData.channel}
                     onChange={e => setNewFeedbackData({ ...newFeedbackData, channel: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="alipay">支付宝快捷支付</option>
                     <option value="wechat">微信支付</option>
                     <option value="unionpay">云闪付</option>
                     <option value="transit_code">乘车码</option>
+                    <option value="mobile_pay">手机Pay</option>
                     <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">不限渠道</option>
                   </select>
                 </div>
               </div>
@@ -739,7 +798,7 @@ export const LedgerFeedbackView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构</label>
                   <input
@@ -750,11 +809,24 @@ export const LedgerFeedbackView: React.FC = () => {
                   />
                 </div>
                 <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">卡种体系</label>
+                  <select
+                    value={editingFeedback.cardType || 'any'}
+                    onChange={e => setEditingFeedback({ ...editingFeedback, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡</option>
+                    <option value="debit">储蓄卡/借记卡</option>
+                    <option value="digital_cny">数字人民币</option>
+                    <option value="any">通用/组合</option>
+                  </select>
+                </div>
+                <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                   <select
                     value={editingFeedback.channel}
                     onChange={e => setEditingFeedback({ ...editingFeedback, channel: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="alipay">支付宝快捷支付</option>
                     <option value="wechat">微信支付</option>
@@ -873,8 +945,8 @@ export const LedgerFeedbackView: React.FC = () => {
                 />
               </div>
 
-              {/* Bank, Scene, Channel */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Bank, CardType, Scene, Channel */}
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构 / 银行</label>
                   <input
@@ -883,6 +955,19 @@ export const LedgerFeedbackView: React.FC = () => {
                     onChange={e => setEditRuleData({ ...editRuleData, bank: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">所属卡种 / 账户体系</label>
+                  <select
+                    value={editRuleData.cardType || 'any'}
+                    onChange={e => setEditRuleData({ ...editRuleData, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡 (独立统计)</option>
+                    <option value="debit">储蓄卡 / 借记卡 (独立统计)</option>
+                    <option value="digital_cny">数字人民币 (独立统计)</option>
+                    <option value="any">不限卡种 / 通用</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费场景</label>
@@ -1342,7 +1427,7 @@ export const LedgerFeedbackView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡机构</label>
                   <input
@@ -1351,6 +1436,19 @@ export const LedgerFeedbackView: React.FC = () => {
                     onChange={e => setNewRuleData({ ...newRuleData, bank: e.target.value })}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">所属卡种 / 账户体系</label>
+                  <select
+                    value={newRuleData.cardType || 'credit'}
+                    onChange={e => setNewRuleData({ ...newRuleData, cardType: e.target.value as CardType })}
+                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  >
+                    <option value="credit">信用卡 (独立统计)</option>
+                    <option value="debit">储蓄卡 / 借记卡 (独立统计)</option>
+                    <option value="digital_cny">数字人民币 (独立统计)</option>
+                    <option value="any">不限卡种 / 通用</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费场景</label>
@@ -1383,6 +1481,7 @@ export const LedgerFeedbackView: React.FC = () => {
                     <option value="transit_code">乘车码</option>
                     <option value="mobile_pay">手机Pay</option>
                     <option value="bank_app">银行App</option>
+                    <option value="digital_cny">数字人民币</option>
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
