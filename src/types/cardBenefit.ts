@@ -106,6 +106,7 @@ export interface MilestoneActivity {
   tiers: ActivityTier[];
   notes: string;
   category?: 'quickpay' | 'asset' | 'spend' | 'general';
+  excludeFromRecommend?: boolean; // 仅活动追踪与收益统计，不参与用卡推荐
   currentSpend?: number;      // 当前已统计消费 (元)
 }
 
@@ -143,6 +144,7 @@ export interface RewardComboActivity {
   start: string;
   end: string;
   notes: string;
+  excludeFromRecommend?: boolean; // 仅活动追踪与收益统计，不参与用卡推荐
   rules: ComboRule[];
 }
 

@@ -487,6 +487,7 @@ export function evaluateRecommendations(
     const effectiveRuleScene = normRuleScene === 'any' ? normQueryScene : normRuleScene;
 
     for (const act of activities) {
+      if (act.excludeFromRecommend) continue;
       const actEndDate = extractDateStr(act.end);
       const actStartDate = extractDateStr(act.start);
       if (actEndDate && curDateStr > actEndDate) continue;
@@ -530,6 +531,7 @@ export function evaluateRecommendations(
     }
 
     for (const combo of rewardActivities) {
+      if (combo.excludeFromRecommend) continue;
       const comboEndDate = extractDateStr(combo.end);
       const comboStartDate = extractDateStr(combo.start);
       if (comboEndDate && curDateStr > comboEndDate) continue;
@@ -618,6 +620,7 @@ export function evaluateRecommendations(
   // 2. Evaluate Milestone Activities (Tiered activities like 交行达标5000送15 / 支付宝快捷支付)
   const curDateStr = extractDateStr(currentDate) || currentDate;
   for (const act of activities) {
+    if (act.excludeFromRecommend) continue;
     // Exclude expired milestone activities
     const actEndDate = extractDateStr(act.end);
     const actStartDate = extractDateStr(act.start);

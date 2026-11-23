@@ -34,13 +34,18 @@ import {
   ArrowRight,
   Sliders,
   Search,
-  X
+  X,
+  ChevronDown,
+  ChevronUp,
+  Award,
+  EyeOff
 } from 'lucide-react';
 
 export const ComboActivitiesView: React.FC = () => {
   const {
     state,
     addFeedbackRecord,
+    deleteFeedbackRecord,
     addActivity,
     updateActivity,
     deleteActivity,
@@ -60,6 +65,18 @@ export const ComboActivitiesView: React.FC = () => {
     channel: string;
     bank: string;
     cardType: CardType;
+    when: string;
+    actualReward: number;
+    note: string;
+  } | null>(null);
+
+  // Expanded activity spend records
+  const [expandedRecords, setExpandedRecords] = useState<Record<string, boolean>>({});
+
+  // Tier Reward Claiming / Earnings Modal
+  const [tierRewardModal, setTierRewardModal] = useState<{
+    activity: MilestoneActivity;
+    tiers: ActivityTier[];
   } | null>(null);
 
   // Edit Milestone Activity modal
@@ -74,6 +91,8 @@ export const ComboActivitiesView: React.FC = () => {
   const [newActivityBank, setNewActivityBank] = useState('支付宝');
   const [newActivityCardType, setNewActivityCardType] = useState<CardType>('any');
   const [newActivityIncludedCardTypes, setNewActivityIncludedCardTypes] = useState<CardType[]>(['credit', 'debit']);
+  const [newActivityCategory, setNewActivityCategory] = useState<'quickpay' | 'spend' | 'general'>('quickpay');
+  const [newActivityExcludeRecommend, setNewActivityExcludeRecommend] = useState<boolean>(false);
   const [newActivityChannel, setNewActivityChannel] = useState('alipay');
   const [newActivityStart, setNewActivityStart] = useState(() => `${getLocalDateString().slice(0, 7)}-01`);
   const [newActivityEnd, setNewActivityEnd] = useState(() => getMonthEndDateString(getLocalDateString().slice(0, 7)));
@@ -122,8 +141,9 @@ export const ComboActivitiesView: React.FC = () => {
       }
       if (activeCategory === 'quickpay') {
         return (
+          act.category === 'quickpay' ||
           act.channel === 'alipay' ||
-          act.name.includes('快捷支付') ||
+          act.name.includes('快捷') ||
           act.name.includes('支付宝')
         );
       }
@@ -160,28 +180,44 @@ export const ComboActivitiesView: React.FC = () => {
 
   const handleQuickSpendSubmit = () => {
     if (!quickSpendModal) return;
-    const { targetActivity, amount, channel, bank, cardType } = quickSpendModal;
+    const { targetActivity, amount, channel, bank, cardType, when, actualReward, note } = quickSpendModal;
 
     addFeedbackRecord({
       ruleId: `combo-${Date.now()}`,
-      ruleName: `${targetActivity} - 消费推进记账`,
+      ruleName: `${targetActivity} - 活动消费记录`,
       bank: bank || '合作银行',
       cardType: cardType || 'any',
       scene: 'any',
-      platform: channel === 'alipay' ? 'alipay' : 'bank_app',
+      platform: channel === 'alipay' ? 'alipay' : channel === 'wechat' ? 'wechat' : 'bank_app',
       channel: channel || 'any',
       amount,
-      expected: 0,
-      actual: 0,
+      expected: actualReward || 0,
+      actual: actualReward || 0,
       confirmed: true,
       result: 'confirmed',
-      when: getNowLocalDateTimeString(),
-      note: `记入【${targetActivity}】消费推进`,
+      when: when ? when.replace('T', ' ') : getNowLocalDateTimeString(),
+      note: note.trim() || `记入【${targetActivity}】活动消费进度`,
       contributedActivities: [targetActivity]
     });
 
-    setToastMsg(`消费 ¥${amount} 已记录并计入【${targetActivity}】活动进度！`);
+    setToastMsg(
+      actualReward > 0
+        ? `消费 ¥${amount}（实得收益 ¥${actualReward}）已计入【${targetActivity}】！`
+        : `消费 ¥${amount} 已记录并计入【${targetActivity}】活动进度！`
+    );
     setQuickSpendModal(null);
+    setTimeout(() => setToastMsg(null), 3000);
+  };
+
+  const handleSaveTierRewards = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!tierRewardModal) return;
+    updateActivity({
+      ...tierRewardModal.activity,
+      tiers: tierRewardModal.tiers
+    });
+    setToastMsg(`已保存【${tierRewardModal.activity.name}】的活动阶梯收益状态！`);
+    setTierRewardModal(null);
     setTimeout(() => setToastMsg(null), 3000);
   };
 
@@ -197,6 +233,8 @@ export const ComboActivitiesView: React.FC = () => {
       bank: resolvedBank,
       cardType: newActivityCardType,
       includedCardTypes: newActivityIncludedCardTypes.length > 0 ? newActivityIncludedCardTypes : undefined,
+      category: newActivityCategory,
+      excludeFromRecommend: newActivityExcludeRecommend,
       platform: 'any',
       channel: newActivityChannel,
       scene: 'any',
@@ -261,12 +299,27 @@ export const ComboActivitiesView: React.FC = () => {
     setTimeout(() => setToastMsg(null), 3000);
   };
 
-  const handleAddPresetTemplate = (preset: 'alipay' | 'bocom' | 'points') => {
-    if (preset === 'alipay') {
+  const handleAddPresetTemplate = (preset: 'debit_quickpay' | 'alipay' | 'bocom' | 'points') => {
+    if (preset === 'debit_quickpay') {
+      setNewActivityName('储蓄卡快捷支付月度达标');
+      setNewActivityBank('中国银行');
+      setNewActivityCardType('debit');
+      setNewActivityIncludedCardTypes([]);
+      setNewActivityCategory('quickpay');
+      setNewActivityExcludeRecommend(true);
+      setNewActivityChannel('any');
+      setNewActivityNotes('储蓄卡绑定支付宝/微信/抖音等快捷支付达标领立减金（仅记账与收益统计，不参与用卡推荐）');
+      setNewActivityTiers([
+        { target: 1000, rewardName: '5元微信立减金', estimatedReward: 5 },
+        { target: 5000, rewardName: '15元立减金', estimatedReward: 15 }
+      ]);
+    } else if (preset === 'alipay') {
       setNewActivityName('支付宝快捷支付11月满额达标狂欢');
       setNewActivityBank('支付宝');
       setNewActivityCardType('any');
       setNewActivityIncludedCardTypes(['credit', 'debit']);
+      setNewActivityCategory('quickpay');
+      setNewActivityExcludeRecommend(false);
       setNewActivityChannel('alipay');
       setNewActivityNotes('绑定银行卡快捷支付消费，满1000返5元，满3000送15元，满5000抽大奖88元');
       setNewActivityTiers([
@@ -279,6 +332,8 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityBank('交通银行');
       setNewActivityCardType('credit');
       setNewActivityIncludedCardTypes([]);
+      setNewActivityCategory('spend');
+      setNewActivityExcludeRecommend(false);
       setNewActivityChannel('any');
       setNewActivityNotes('当月信用卡消费满5000元给1次抽奖，满8000元再给1次抽奖机会（数币/储蓄卡不计入）');
       setNewActivityTiers([
@@ -290,6 +345,8 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityBank('通用/多行');
       setNewActivityCardType('credit');
       setNewActivityIncludedCardTypes([]);
+      setNewActivityCategory('spend');
+      setNewActivityExcludeRecommend(false);
       setNewActivityChannel('any');
       setNewActivityNotes('信用卡消费满额赠送海量综合积分');
       setNewActivityTiers([
@@ -438,6 +495,15 @@ export const ComboActivitiesView: React.FC = () => {
           <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
             <button
               onClick={() => {
+                handleAddPresetTemplate('debit_quickpay');
+                setIsNewActivityOpen(true);
+              }}
+              className="px-3.5 py-1.5 text-xs font-semibold bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
+            >
+              + 储蓄卡快捷支付达标 (不推荐)
+            </button>
+            <button
+              onClick={() => {
                 handleAddPresetTemplate('alipay');
                 setIsNewActivityOpen(true);
               }}
@@ -493,9 +559,23 @@ export const ComboActivitiesView: React.FC = () => {
             const highestTier = activity.tiers.reduce((max, t) => (t.target > max ? t.target : max), 1);
             const nextTier = activity.tiers.find(t => t.target > currentSpend);
             const isAlipayQuickpay =
+              activity.category === 'quickpay' ||
               activity.channel === 'alipay' ||
-              activity.name.includes('快捷支付') ||
+              activity.name.includes('快捷') ||
               activity.name.includes('支付宝');
+
+            const activityRecords = state.feedback.filter(
+              f => f.contributedActivities && f.contributedActivities.includes(activity.name)
+            );
+            const tierConfirmedEarnings = activity.tiers
+              .filter(t => t.rewardStatus === 'confirmed' || t.rewardStatus === 'claimed')
+              .reduce((sum, t) => sum + (t.actualReward || t.estimatedReward || 0), 0);
+            const recordInstantEarnings = activityRecords.reduce(
+              (sum, f) => sum + (f.actual || 0),
+              0
+            );
+            const totalActivityEarnings = tierConfirmedEarnings + recordInstantEarnings;
+            const isExpanded = Boolean(expandedRecords[activity.id]);
 
             return (
               <div
@@ -552,6 +632,18 @@ export const ComboActivitiesView: React.FC = () => {
                             快捷支付
                           </span>
                         )}
+                        {activity.excludeFromRecommend && (
+                          <span
+                            className={`px-2 py-0.5 text-2xs font-semibold rounded flex items-center gap-1 ${
+                              isAlipayQuickpay
+                                ? 'bg-slate-700/80 text-slate-200 border border-white/15'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
+                            }`}
+                          >
+                            <EyeOff className="w-3 h-3" />
+                            <span>仅记录/不推荐</span>
+                          </span>
+                        )}
                       </div>
                       <div
                         className={`text-xs mt-0.5 flex flex-wrap items-center gap-3 ${
@@ -568,7 +660,7 @@ export const ComboActivitiesView: React.FC = () => {
                   </div>
 
                   {/* Actions */}
-                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0 flex-wrap">
                     <button
                       onClick={() =>
                         setQuickSpendModal({
@@ -576,7 +668,10 @@ export const ComboActivitiesView: React.FC = () => {
                           amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
                           channel: activity.channel === 'any' ? (actCardType === 'digital_cny' ? 'digital_cny' : 'alipay') : activity.channel,
                           bank: displayBank,
-                          cardType: actCardType
+                          cardType: actCardType,
+                          when: getNowLocalDateTimeString(),
+                          actualReward: 0,
+                          note: ''
                         })
                       }
                       className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs ${
@@ -587,6 +682,23 @@ export const ComboActivitiesView: React.FC = () => {
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>记录消费</span>
+                    </button>
+                    <button
+                      onClick={() =>
+                        setTierRewardModal({
+                          activity,
+                          tiers: activity.tiers.map(t => ({ ...t }))
+                        })
+                      }
+                      className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 border ${
+                        isAlipayQuickpay
+                          ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border-emerald-400/30'
+                          : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-800'
+                      }`}
+                      title="确认阶梯达标收益并记录实得金额"
+                    >
+                      <Award className="w-3.5 h-3.5" />
+                      <span>登记收益</span>
                     </button>
                     <button
                       onClick={() =>
@@ -618,14 +730,24 @@ export const ComboActivitiesView: React.FC = () => {
 
                 {/* Progress bar & Numbers */}
                 <div className="space-y-3">
-                  <div className="flex items-baseline justify-between text-xs">
-                    <div>
-                      <span className={isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
-                        本期累计已计入消费:
-                      </span>{' '}
-                      <span className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums">
-                        {formatCurrency(currentSpend)}
-                      </span>
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs">
+                    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
+                      <div>
+                        <span className={isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
+                          本期累计已计入消费:
+                        </span>{' '}
+                        <span className="text-xl sm:text-2xl font-extrabold font-mono tabular-nums">
+                          {formatCurrency(currentSpend)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className={isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'}>
+                          活动已入账收益:
+                        </span>{' '}
+                        <span className="text-base sm:text-lg font-extrabold font-mono tabular-nums text-emerald-400 dark:text-emerald-400">
+                          +{formatCurrency(totalActivityEarnings)}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="text-right">
@@ -665,12 +787,19 @@ export const ComboActivitiesView: React.FC = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   {activity.tiers.map((tier, idx) => {
                     const isAchieved = currentSpend >= tier.target;
+                    const isClaimedOrConfirmed = tier.rewardStatus === 'confirmed' || tier.rewardStatus === 'claimed';
                     const diff = tier.target - currentSpend;
 
                     return (
                       <div
                         key={tier.id || idx}
-                        className={`p-3.5 rounded-xl border transition-all space-y-1.5 ${
+                        onClick={() =>
+                          setTierRewardModal({
+                            activity,
+                            tiers: activity.tiers.map(t => ({ ...t }))
+                          })
+                        }
+                        className={`p-3.5 rounded-xl border transition-all space-y-1.5 cursor-pointer hover:ring-1 hover:ring-indigo-400/50 ${
                           isAchieved
                             ? isAlipayQuickpay
                               ? 'bg-sky-500/20 border-sky-400/40 text-white'
@@ -679,6 +808,7 @@ export const ComboActivitiesView: React.FC = () => {
                             ? 'bg-white/5 border-white/10 text-slate-300'
                             : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
                         }`}
+                        title="点击登记或修改此阶梯收益状态"
                       >
                         <div className="flex items-center justify-between text-xs">
                           <span className="font-bold font-mono">满 ¥{tier.target}</span>
@@ -696,12 +826,101 @@ export const ComboActivitiesView: React.FC = () => {
                         </div>
 
                         <div className="text-3xs text-slate-500 dark:text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200/40 dark:border-slate-700/40">
-                          <span>预估价值: ¥{tier.estimatedReward || 0}</span>
-                          <span>{tier.rewardStatus === 'confirmed' ? '已领取' : '达成即领'}</span>
+                          <span>
+                            {isClaimedOrConfirmed
+                              ? `实得: ¥${tier.actualReward || tier.estimatedReward || 0}`
+                              : `预估价值: ¥${tier.estimatedReward || 0}`}
+                          </span>
+                          <span
+                            className={`font-semibold ${
+                              tier.rewardStatus === 'claimed'
+                                ? 'text-emerald-500 dark:text-emerald-400'
+                                : tier.rewardStatus === 'confirmed'
+                                ? 'text-sky-500 dark:text-sky-400'
+                                : ''
+                            }`}
+                          >
+                            {tier.rewardStatus === 'claimed'
+                              ? '已到账 ✓'
+                              : tier.rewardStatus === 'confirmed'
+                              ? '已确认'
+                              : '点击登记收益'}
+                          </span>
                         </div>
                       </div>
                     );
                   })}
+                </div>
+
+                {/* Activity Records Toggle & Inline List */}
+                <div className={`pt-2 border-t ${isAlipayQuickpay ? 'border-white/10' : 'border-slate-100 dark:border-slate-800'}`}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setExpandedRecords(prev => ({
+                        ...prev,
+                        [activity.id]: !prev[activity.id]
+                      }))
+                    }
+                    className={`w-full flex items-center justify-between text-xs font-medium py-1 ${
+                      isAlipayQuickpay ? 'text-slate-300 hover:text-white' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <span>
+                      本活动已录入消费与收益流水 ({activityRecords.length} 笔)
+                    </span>
+                    <span className="flex items-center gap-1 text-2xs">
+                      {isExpanded ? '收起明细' : '查看/管理记录'}
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="mt-2 space-y-1.5">
+                      {activityRecords.length === 0 ? (
+                        <div className={`text-2xs py-3 text-center rounded-lg ${isAlipayQuickpay ? 'bg-white/5 text-slate-400' : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400'}`}>
+                          暂无关联记录，点击上方「+ 记录消费」即可添加本活动进度记录
+                        </div>
+                      ) : (
+                        activityRecords.map(rec => (
+                          <div
+                            key={rec.id}
+                            className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-2xs ${
+                              isAlipayQuickpay
+                                ? 'bg-white/5 text-slate-200 border border-white/10'
+                                : 'bg-slate-50 dark:bg-slate-800/50 text-slate-700 dark:text-slate-300 border border-slate-100 dark:border-slate-800'
+                            }`}
+                          >
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 min-w-0">
+                              <span className="font-mono opacity-75">{rec.when?.replace('T', ' ') || rec.feedbackAt?.slice(0, 10)}</span>
+                              <span className="font-bold font-mono">消费 {formatCurrency(rec.amount)}</span>
+                              <span className="opacity-75">渠道: {rec.channel}</span>
+                              {rec.actual > 0 && (
+                                <span className="text-emerald-400 font-semibold font-mono">
+                                  即时收益 +{formatCurrency(rec.actual)}
+                                </span>
+                              )}
+                              {rec.note && <span className="opacity-75 truncate">({rec.note})</span>}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm(`确定删除该笔 ¥${rec.amount} 的活动记录吗？（将同步扣减本活动累计消费）`)) {
+                                  deleteFeedbackRecord(rec.id);
+                                  setToastMsg(`已删除活动记录并同步更新进度`);
+                                  setTimeout(() => setToastMsg(null), 3000);
+                                }
+                              }}
+                              className="text-slate-400 hover:text-rose-400 p-1 shrink-0"
+                              title="删除此记录"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -759,7 +978,10 @@ export const ComboActivitiesView: React.FC = () => {
                           amount: 16,
                           channel: combo.channels?.[0] || 'alipay',
                           bank: displayBank,
-                          cardType: comboCardType
+                          cardType: comboCardType,
+                          when: getNowLocalDateTimeString(),
+                          actualReward: 0,
+                          note: ''
                         })
                       }
                       className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
@@ -850,9 +1072,9 @@ export const ComboActivitiesView: React.FC = () => {
       {/* Quick Spend Modal */}
       {quickSpendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">记录消费以推进活动进度</h3>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">增加活动消费记录</h3>
               <button
                 onClick={() => setQuickSpendModal(null)}
                 className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
@@ -866,20 +1088,39 @@ export const ComboActivitiesView: React.FC = () => {
                 活动项目：<span className="font-semibold text-slate-900 dark:text-white">{quickSpendModal.targetActivity}</span>
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本次消费金额 (元)</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={quickSpendModal.amount}
-                  onChange={e =>
-                    setQuickSpendModal({
-                      ...quickSpendModal,
-                      amount: parseFloat(e.target.value) || 0
-                    })
-                  }
-                  className="w-full px-3 py-2 text-base font-bold font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本次消费金额 (元)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={quickSpendModal.amount}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        amount: parseFloat(e.target.value) || 0
+                      })
+                    }
+                    className="w-full px-3 py-2 text-base font-bold font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本笔即时实得收益 (元/可选)</label>
+                  <input
+                    type="number"
+                    step="any"
+                    min="0"
+                    value={quickSpendModal.actualReward}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        actualReward: parseFloat(e.target.value) || 0
+                      })
+                    }
+                    placeholder="0 表示仅累计达标额"
+                    className="w-full px-3 py-2 text-base font-bold font-mono text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -924,6 +1165,38 @@ export const ComboActivitiesView: React.FC = () => {
                   </select>
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费时间</label>
+                  <input
+                    type="datetime-local"
+                    value={quickSpendModal.when.replace(' ', 'T').slice(0, 16)}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        when: e.target.value.replace('T', ' ')
+                      })
+                    }
+                    className="w-full px-3 py-2 font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">备注说明 (可选)</label>
+                  <input
+                    type="text"
+                    value={quickSpendModal.note}
+                    onChange={e =>
+                      setQuickSpendModal({
+                        ...quickSpendModal,
+                        note: e.target.value
+                      })
+                    }
+                    placeholder="如：支付宝充值/网购"
+                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
@@ -943,6 +1216,132 @@ export const ComboActivitiesView: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tier Reward Claiming Modal */}
+      {tierRewardModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+          <form
+            onSubmit={handleSaveTierRewards}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Award className="w-4 h-4 text-emerald-500" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">登记活动阶梯收益</h3>
+                  <p className="text-2xs text-slate-400">{tierRewardModal.activity.name}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTierRewardModal(null)}
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+              {tierRewardModal.tiers.map((tier, idx) => (
+                <div
+                  key={tier.id || idx}
+                  className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200 dark:border-slate-700 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-slate-900 dark:text-white font-mono">
+                      满 ¥{tier.target} · {tier.rewardName}
+                    </span>
+                    <span className="text-2xs text-slate-400">预估 ¥{tier.estimatedReward || 0}</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div>
+                      <label className="block text-3xs text-slate-500 mb-1">领取状态</label>
+                      <select
+                        value={tier.rewardStatus}
+                        onChange={e => {
+                          const nextStatus = e.target.value as ActivityTier['rewardStatus'];
+                          const updated = [...tierRewardModal.tiers];
+                          updated[idx] = {
+                            ...updated[idx],
+                            rewardStatus: nextStatus,
+                            actualReward:
+                              nextStatus !== 'unconfirmed' && !updated[idx].actualReward
+                                ? updated[idx].estimatedReward || 0
+                                : updated[idx].actualReward,
+                            receivedDate:
+                              nextStatus !== 'unconfirmed' && !updated[idx].receivedDate
+                                ? getLocalDateString()
+                                : updated[idx].receivedDate
+                          };
+                          setTierRewardModal({ ...tierRewardModal, tiers: updated });
+                        }}
+                        className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      >
+                        <option value="unconfirmed">待达成/未领取</option>
+                        <option value="confirmed">已达成待入账</option>
+                        <option value="claimed">已到账领取</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-3xs text-slate-500 mb-1">实际收益金额 (元)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0"
+                        value={tier.actualReward || 0}
+                        onChange={e => {
+                          const updated = [...tierRewardModal.tiers];
+                          updated[idx] = {
+                            ...updated[idx],
+                            actualReward: parseFloat(e.target.value) || 0
+                          };
+                          setTierRewardModal({ ...tierRewardModal, tiers: updated });
+                        }}
+                        className="w-full px-2 py-1.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-3xs text-slate-500 mb-1">到账/确认日期</label>
+                      <input
+                        type="date"
+                        value={tier.receivedDate || ''}
+                        onChange={e => {
+                          const updated = [...tierRewardModal.tiers];
+                          updated[idx] = {
+                            ...updated[idx],
+                            receivedDate: e.target.value
+                          };
+                          setTierRewardModal({ ...tierRewardModal, tiers: updated });
+                        }}
+                        className="w-full px-2 py-1.5 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setTierRewardModal(null)}
+                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg"
+              >
+                保存收益状态
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -1021,7 +1420,7 @@ export const ComboActivitiesView: React.FC = () => {
               </div>
 
               {/* Explicit Combo Cross-Card Allowance */}
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
                   组合活动特别说明：允许同时计入以下卡种消费
                   <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
@@ -1048,6 +1447,17 @@ export const ComboActivitiesView: React.FC = () => {
                     );
                   })}
                 </div>
+                <label className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700 flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingMilestone.excludeFromRecommend)}
+                    onChange={e =>
+                      setEditingMilestone({ ...editingMilestone, excludeFromRecommend: e.target.checked })
+                    }
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>不参与「用卡推荐」（仅记录活动进度与收益，适用于储蓄卡快捷达标等专项追踪）</span>
+                </label>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1267,7 +1677,7 @@ export const ComboActivitiesView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
                   组合活动特别说明：允许同时计入以下卡种
                   <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
@@ -1294,6 +1704,17 @@ export const ComboActivitiesView: React.FC = () => {
                     );
                   })}
                 </div>
+                <label className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700 flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingCombo.excludeFromRecommend)}
+                    onChange={e =>
+                      setEditingCombo({ ...editingCombo, excludeFromRecommend: e.target.checked })
+                    }
+                    className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span>不参与「用卡推荐」（仅记录活动进度与收益）</span>
+                </label>
               </div>
 
               {/* Combo rules editor */}
@@ -1393,7 +1814,14 @@ export const ComboActivitiesView: React.FC = () => {
             {/* Quick Templates */}
             <div>
               <label className="block text-2xs font-semibold text-slate-500 mb-1">选择预设模板</label>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleAddPresetTemplate('debit_quickpay')}
+                  className="px-2.5 py-1 text-2xs font-medium rounded-lg bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800"
+                >
+                  储蓄卡快捷支付达标 (不推荐)
+                </button>
                 <button
                   type="button"
                   onClick={() => handleAddPresetTemplate('alipay')}
@@ -1471,7 +1899,7 @@ export const ComboActivitiesView: React.FC = () => {
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
                 <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
                   组合活动特别说明：允许同时计入以下卡种消费
                   <span className="font-normal text-slate-400 ml-1">(不勾选则严格按主卡种独立统计)</span>
@@ -1497,6 +1925,15 @@ export const ComboActivitiesView: React.FC = () => {
                     );
                   })}
                 </div>
+                <label className="pt-1.5 border-t border-slate-200/70 dark:border-slate-700 flex items-center gap-2 cursor-pointer text-xs text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={newActivityExcludeRecommend}
+                    onChange={e => setNewActivityExcludeRecommend(e.target.checked)}
+                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span>不参与「用卡推荐」（仅记录活动进度与收益，适合储蓄卡快捷达标等专项记录）</span>
+                </label>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

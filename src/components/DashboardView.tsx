@@ -121,7 +121,7 @@ export const DashboardView: React.FC = () => {
       act.tiers.forEach(t => {
         const val = t.actualReward || t.estimatedReward || 0;
         if (t.rewardStatus === 'confirmed' || t.rewardStatus === 'claimed') {
-          if (act.name.includes('快捷支付') || act.channel === 'alipay') {
+          if (act.category === 'quickpay' || act.name.includes('快捷') || act.channel === 'alipay') {
             quickPayTotal += val;
           } else {
             cashbackTotal += val;
