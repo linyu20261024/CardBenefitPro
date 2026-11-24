@@ -160,9 +160,9 @@ export const AssetMilestonesView: React.FC = () => {
     <div className="space-y-6">
       {/* Toast */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
-          <CheckCircle2 className="w-5 h-5" />
-          <span>{toastMsg}</span>
+        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
+          <span className="truncate">{toastMsg}</span>
         </div>
       )}
 
@@ -464,7 +464,7 @@ export const AssetMilestonesView: React.FC = () => {
             </div>
 
             {/* Entries Table */}
-            <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xs space-y-3">
+            <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                   已录入资产明细表 ({activityEntries.length} 天)
@@ -477,42 +477,75 @@ export const AssetMilestonesView: React.FC = () => {
                   暂无记录，请在左侧录入资产余额
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-100 dark:border-slate-800">
-                      <tr>
-                        <th className="py-2.5 px-3 font-semibold">日期</th>
-                        <th className="py-2.5 px-3 font-semibold text-right">当日结存余额</th>
-                        <th className="py-2.5 px-3 font-semibold">备注说明</th>
-                        <th className="py-2.5 px-3 font-semibold text-center">操作</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
-                      {activityEntries.map(entry => (
-                        <tr key={entry.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                          <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-medium">
-                            {entry.date}
-                          </td>
-                          <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">
-                            {formatCurrency(entry.amount)}
-                          </td>
-                          <td className="py-2.5 px-3 font-sans text-slate-500">
-                            {entry.notes || '-'}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <button
-                              onClick={() => deleteBankAssetEntry(entry.id)}
-                              className="text-slate-400 hover:text-rose-500 p-1 rounded"
-                              title="删除记录"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
+                <>
+                  {/* Mobile Card Rows */}
+                  <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+                    {activityEntries.map(entry => (
+                      <div key={entry.id} className="py-2.5 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-mono font-semibold text-slate-800 dark:text-slate-200">
+                              {entry.date}
+                            </span>
+                            <span className="text-xs font-mono font-bold text-slate-900 dark:text-white">
+                              {formatCurrency(entry.amount)}
+                            </span>
+                          </div>
+                          {entry.notes && (
+                            <div className="text-2xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                              {entry.notes}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => deleteBankAssetEntry(entry.id)}
+                          className="text-slate-400 hover:text-rose-500 p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 shrink-0"
+                          title="删除记录"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Desktop Table */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-100 dark:border-slate-800">
+                        <tr>
+                          <th className="py-2.5 px-3 font-semibold">日期</th>
+                          <th className="py-2.5 px-3 font-semibold text-right">当日结存余额</th>
+                          <th className="py-2.5 px-3 font-semibold">备注说明</th>
+                          <th className="py-2.5 px-3 font-semibold text-center">操作</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-mono">
+                        {activityEntries.map(entry => (
+                          <tr key={entry.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                            <td className="py-2.5 px-3 text-slate-700 dark:text-slate-300 font-medium">
+                              {entry.date}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-bold text-slate-900 dark:text-white">
+                              {formatCurrency(entry.amount)}
+                            </td>
+                            <td className="py-2.5 px-3 font-sans text-slate-500">
+                              {entry.notes || '-'}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                onClick={() => deleteBankAssetEntry(entry.id)}
+                                className="text-slate-400 hover:text-rose-500 p-1 rounded"
+                                title="删除记录"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -521,10 +554,10 @@ export const AssetMilestonesView: React.FC = () => {
 
       {/* Edit Bank Asset Activity Rules Modal */}
       {editingAssetActivity && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleSaveAssetEdit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -700,13 +733,13 @@ export const AssetMilestonesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setEditingAssetActivity(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                className="px-4 py-2.5 min-h-[40px] text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
+                className="px-4 py-2.5 min-h-[40px] text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
               >
                 保存规则修改
               </button>
@@ -717,10 +750,10 @@ export const AssetMilestonesView: React.FC = () => {
 
       {/* New Bank Asset Activity Modal */}
       {isNewAssetModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleCreateAssetActivity}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">新增银行月日均资产活动</h3>
@@ -876,13 +909,13 @@ export const AssetMilestonesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsNewAssetModalOpen(false)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                className="px-4 py-2.5 min-h-[40px] text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
+                className="px-4 py-2.5 min-h-[40px] text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg"
               >
                 创建银行资产活动
               </button>

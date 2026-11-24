@@ -19,7 +19,9 @@ import {
   inferCardType,
   isCardTypeCompatible,
   normalizeKey,
-  getActivityChannels
+  getActivityChannels,
+  PAYMENT_CHANNEL_OPTIONS,
+  SPEND_SCENE_OPTIONS
 } from '../utils/engine';
 
 const STORAGE_KEY = 'card_benefit_pro_user_data';
@@ -214,20 +216,29 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         record.cardType ||
         (matchedRule ? inferCardType(matchedRule) : inferCardType(record));
 
+      const recordChannel = normalizeKey(record.channel) || 'any';
+
       const filteredContributed = (record.contributedActivities || []).filter(actName => {
         const act = prev.activities.find(a => a.name === actName);
         if (act) {
-          return isCardTypeCompatible(recordCardType, inferCardType(act), act.includedCardTypes, act.bank);
+          const cardOk = isCardTypeCompatible(recordCardType, inferCardType(act), act.includedCardTypes, act.bank);
+          const actChannels = getActivityChannels(act);
+          const chOk = actChannels.includes('any') || recordChannel === 'any' || actChannels.includes(recordChannel);
+          return cardOk && chOk;
         }
         const combo = prev.rewardActivities.find(c => c.name === actName);
         if (combo) {
-          return isCardTypeCompatible(recordCardType, inferCardType(combo), combo.includedCardTypes, combo.bank);
+          const cardOk = isCardTypeCompatible(recordCardType, inferCardType(combo), combo.includedCardTypes, combo.bank);
+          const comboChannels = (combo.channels || []).map(c => normalizeKey(c));
+          const chOk = comboChannels.length === 0 || comboChannels.includes('any') || recordChannel === 'any' || comboChannels.includes(recordChannel);
+          return cardOk && chOk;
         }
         return true;
       });
 
       const newRecord: FeedbackRecord = {
         ...record,
+        channel: recordChannel,
         cardType: recordCardType,
         contributedActivities: filteredContributed,
         id: `feed-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -253,7 +264,7 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
         ) {
           return {
             ...act,
-            currentSpend: (act.currentSpend || 0) + record.amount
+            currentSpend: Number(((act.currentSpend || 0) + record.amount).toFixed(2))
           };
         }
         return act;
@@ -272,24 +283,36 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const updateFeedbackRecord = (updatedRecord: FeedbackRecord) => {
     setState(prev => {
       const oldRecord = prev.feedback.find(f => f.id === updatedRecord.id);
-      const amountDelta = oldRecord ? updatedRecord.amount - oldRecord.amount : 0;
+      const oldAmount = oldRecord?.amount || 0;
+      const newAmount = updatedRecord.amount || 0;
+      const oldActs = new Set(oldRecord?.contributedActivities || []);
+      const newActs = new Set(updatedRecord.contributedActivities || []);
 
-      const updatedActivities =
-        oldRecord && amountDelta !== 0
-          ? prev.activities.map(act => {
-              const hadOld = oldRecord.contributedActivities?.includes(act.name);
-              const hasNew = updatedRecord.contributedActivities?.includes(act.name);
-              if (hadOld && hasNew) {
-                return { ...act, currentSpend: Math.max(0, (act.currentSpend || 0) + amountDelta) };
-              }
-              return act;
-            })
-          : prev.activities;
+      const updatedActivities = oldRecord
+        ? prev.activities.map(act => {
+            const hadOld = oldActs.has(act.name);
+            const hasNew = newActs.has(act.name);
+            if (!hadOld && !hasNew) return act;
+            let delta = 0;
+            if (hadOld && hasNew) delta = newAmount - oldAmount;
+            else if (!hadOld && hasNew) delta = newAmount;
+            else if (hadOld && !hasNew) delta = -oldAmount;
+            if (delta === 0) return act;
+            return {
+              ...act,
+              currentSpend: Math.max(0, Number(((act.currentSpend || 0) + delta).toFixed(2)))
+            };
+          })
+        : prev.activities;
 
       return {
         ...prev,
         activities: updatedActivities,
-        feedback: prev.feedback.map(f => (f.id === updatedRecord.id ? updatedRecord : f)),
+        feedback: prev.feedback.map(f =>
+          f.id === updatedRecord.id
+            ? { ...updatedRecord, channel: normalizeKey(updatedRecord.channel) || 'any' }
+            : f
+        ),
         lastUpdated: new Date().toISOString()
       };
     });
@@ -543,20 +566,73 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
   };
 
   const exportJsonData = (): string => {
-    // Generate compatible backup format with both original fields and enhanced models
+    // Merge standard channel & scene dictionaries for seamless import into PocketGains (拾零账本) and backup restore
+    const channelMap = new Map<string, string>();
+    [...PAYMENT_CHANNEL_OPTIONS, { value: 'any', label: '不限渠道' }, ...(state.customChannels || [])].forEach(c => {
+      const key = normalizeKey(c.value);
+      if (key && !channelMap.has(key)) {
+        channelMap.set(key, c.label);
+      }
+    });
+    const mergedCustomChannels = Array.from(channelMap.entries()).map(([value, label]) => ({ value, label }));
+
+    const sceneMap = new Map<string, string>();
+    [...SPEND_SCENE_OPTIONS, ...(state.customScenes || [])].forEach(s => {
+      const key = normalizeKey(s.value);
+      if (key && !sceneMap.has(key)) {
+        sceneMap.set(key, s.label);
+      }
+    });
+    const mergedCustomScenes = Array.from(sceneMap.entries()).map(([value, label]) => ({ value, label }));
+
+    // Normalize activities & feedback for PocketGains compatibility while preserving 100% lossless backup
+    const normalizedActivities = (state.activities || []).map(act => {
+      const chList = getActivityChannels(act);
+      return {
+        ...act,
+        channel: chList.includes('any') ? 'any' : chList[0],
+        channels: chList,
+        tiers: (act.tiers || []).map(tier => {
+          const isPaidOut = tier.rewardStatus === 'confirmed' || tier.rewardStatus === 'claimed';
+          const hasCashReward = (tier.actualReward || 0) > 0;
+          const compatibleRewardType =
+            isPaidOut && hasCashReward && (!tier.rewardType || tier.rewardType === 'other')
+              ? 'cashback'
+              : tier.rewardType;
+          return {
+            ...tier,
+            rewardType: compatibleRewardType
+          };
+        })
+      };
+    });
+
+    const normalizedFeedback = (state.feedback || []).map(f => ({
+      ...f,
+      channel: normalizeKey(f.channel) || 'any',
+      scene: normalizeKey(f.scene) || 'any',
+      when: f.when ? f.when.replace('T', ' ') : f.when
+    }));
+
+    const exportState = {
+      ...state,
+      version: 6,
+      activities: normalizedActivities,
+      feedback: normalizedFeedback,
+      customChannels: mergedCustomChannels,
+      customScenes: mergedCustomScenes,
+      lastUpdated: new Date().toISOString()
+    };
+
     const exportObject = {
-      backupFormat: "card-recommender-backup",
+      backupFormat: 'card-recommender-backup',
       backupVersion: 6,
       appVersion: 6,
       exportedAt: new Date().toISOString(),
-      state: {
-        ...state,
-        version: 6,
-        lastUpdated: new Date().toISOString()
-      },
+      state: exportState,
       customPlatforms: state.customPlatforms,
-      customScenes: state.customScenes,
-      customChannels: state.customChannels
+      customScenes: mergedCustomScenes,
+      customChannels: mergedCustomChannels
     };
     return JSON.stringify(exportObject, null, 2);
   };

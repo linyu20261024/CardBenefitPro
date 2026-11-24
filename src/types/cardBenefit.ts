@@ -7,6 +7,10 @@ export type PaymentChannel =
   | 'alipay'         // 支付宝 / 快捷支付
   | 'wechat'         // 微信支付
   | 'unionpay'       // 云闪付 / 银联
+  | 'douyin'         // 抖音支付
+  | 'jd'             // 京东支付
+  | 'meituan'        // 美团支付
+  | 'pinduoduo'      // 多多支付
   | 'mobile_pay'     // 手机Pay (Apple Pay / Huawei Pay / 手机闪付)
   | 'transit_code'   // 乘车码 (交通二维码)
   | 'bank_app'       // 银行专属App (买单吧 / 兴业生活 / 阳光惠生活 / 建行生活等)
@@ -204,6 +208,7 @@ export interface RecommendationResult {
   bank: string;
   cardType: CardType;
   channel: string;
+  eligibleChannels?: string[];
   scene: string;
   platform: string;
   type: string;

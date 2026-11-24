@@ -68,6 +68,8 @@ export const ComboActivitiesView: React.FC = () => {
     targetActivity: string;
     amount: number;
     channel: string;
+    allowedChannels: string[];
+    isChannelRestricted: boolean;
     bank: string;
     cardType: CardType;
     when: string;
@@ -388,8 +390,8 @@ export const ComboActivitiesView: React.FC = () => {
     <div className="space-y-6">
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
-          <CheckCircle2 className="w-5 h-5" />
+        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-xs sm:text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
           <span>{toastMsg}</span>
         </div>
       )}
@@ -701,11 +703,20 @@ export const ComboActivitiesView: React.FC = () => {
                     <button
                       onClick={() => {
                         const actChannels = getActivityChannels(activity);
-                        const defaultCh = actChannels.find(c => c !== 'any') || (actCardType === 'digital_cny' ? 'digital_cny' : 'alipay');
+                        const concreteActChannels = actChannels.filter(c => c !== 'any');
+                        const isRestricted = concreteActChannels.length > 0;
+                        const allowedList = isRestricted
+                          ? concreteActChannels
+                          : actCardType === 'digital_cny'
+                          ? ['digital_cny']
+                          : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+                        const defaultCh = allowedList[0] || 'alipay';
                         setQuickSpendModal({
                           targetActivity: activity.name,
                           amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
                           channel: defaultCh,
+                          allowedChannels: allowedList,
+                          isChannelRestricted: isRestricted,
                           bank: displayBank,
                           cardType: actCardType,
                           when: getNowLocalDateTimeString(),
@@ -1017,18 +1028,27 @@ export const ComboActivitiesView: React.FC = () => {
 
                   <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
                     <button
-                      onClick={() =>
+                      onClick={() => {
+                        const comboChannels = (combo.channels || []).filter(c => c && c !== 'any');
+                        const isRestricted = comboChannels.length > 0;
+                        const allowedList = isRestricted
+                          ? comboChannels
+                          : comboCardType === 'digital_cny'
+                          ? ['digital_cny']
+                          : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
                         setQuickSpendModal({
                           targetActivity: combo.name,
                           amount: 16,
-                          channel: combo.channels?.[0] || 'alipay',
+                          channel: allowedList[0] || 'alipay',
+                          allowedChannels: allowedList,
+                          isChannelRestricted: isRestricted,
                           bank: displayBank,
                           cardType: comboCardType,
                           when: getNowLocalDateTimeString(),
                           actualReward: 0,
                           note: ''
-                        })
-                      }
+                        });
+                      }}
                       className="px-3.5 py-1.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors flex items-center gap-1.5 shadow-xs"
                     >
                       <Coins className="w-3.5 h-3.5" />
@@ -1116,13 +1136,13 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* Quick Spend Modal */}
       {quickSpendModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">增加活动消费记录</h3>
               <button
                 onClick={() => setQuickSpendModal(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1.5"
               >
                 ✕
               </button>
@@ -1176,7 +1196,7 @@ export const ComboActivitiesView: React.FC = () => {
                         cardType: e.target.value as CardType
                       })
                     }
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="credit">信用卡</option>
                     <option value="debit">储蓄卡/借记卡</option>
@@ -1186,7 +1206,12 @@ export const ComboActivitiesView: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-700 dark:text-slate-300 font-medium">支付渠道</label>
+                    {quickSpendModal.isChannelRestricted && (
+                      <span className="text-3xs text-indigo-600 dark:text-indigo-400 font-medium">已匹配活动渠道</span>
+                    )}
+                  </div>
                   <select
                     value={quickSpendModal.channel}
                     onChange={e =>
@@ -1195,12 +1220,11 @@ export const ComboActivitiesView: React.FC = () => {
                         channel: e.target.value
                       })
                     }
-                    className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-3 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    {PAYMENT_CHANNEL_OPTIONS.map(ch => (
-                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                    {quickSpendModal.allowedChannels.map(chVal => (
+                      <option key={chVal} value={chVal}>{getChannelLabel(chVal)}</option>
                     ))}
-                    <option value="any">不限渠道</option>
                   </select>
                 </div>
               </div>
@@ -1238,18 +1262,18 @@ export const ComboActivitiesView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setQuickSpendModal(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                className="px-4 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-h-[40px]"
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={handleQuickSpendSubmit}
-                className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg hover:bg-slate-800"
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg hover:bg-slate-800 min-h-[40px]"
               >
                 确认记录
               </button>
@@ -1260,10 +1284,10 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* Tier Reward Claiming Modal */}
       {tierRewardModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleSaveTierRewards}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1276,13 +1300,13 @@ export const ComboActivitiesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setTierRewardModal(null)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-semibold"
+                className="text-slate-400 hover:text-slate-600 text-sm font-semibold p-1.5"
               >
                 ✕
               </button>
             </div>
 
-            <div className="space-y-3 text-xs max-h-[60vh] overflow-y-auto pr-1">
+            <div className="space-y-3 text-xs max-h-[58dvh] overflow-y-auto pr-1">
               {tierRewardModal.tiers.map((tier, idx) => (
                 <div
                   key={tier.id || idx}
@@ -1295,7 +1319,7 @@ export const ComboActivitiesView: React.FC = () => {
                     <span className="text-2xs text-slate-400">预估 ¥{tier.estimatedReward || 0}</span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <label className="block text-3xs text-slate-500 mb-1">领取状态</label>
                       <select
@@ -1303,13 +1327,21 @@ export const ComboActivitiesView: React.FC = () => {
                         onChange={e => {
                           const nextStatus = e.target.value as ActivityTier['rewardStatus'];
                           const updated = [...tierRewardModal.tiers];
+                          const nextActual =
+                            nextStatus !== 'unconfirmed' && !updated[idx].actualReward
+                              ? updated[idx].estimatedReward || 0
+                              : updated[idx].actualReward;
+                          const nextType =
+                            nextStatus !== 'unconfirmed' &&
+                            (updated[idx].rewardType === 'other' ||
+                              (updated[idx].rewardType === 'lottery' && nextActual > 0))
+                              ? 'cashback'
+                              : updated[idx].rewardType;
                           updated[idx] = {
                             ...updated[idx],
                             rewardStatus: nextStatus,
-                            actualReward:
-                              nextStatus !== 'unconfirmed' && !updated[idx].actualReward
-                                ? updated[idx].estimatedReward || 0
-                                : updated[idx].actualReward,
+                            rewardType: nextType,
+                            actualReward: nextActual,
                             receivedDate:
                               nextStatus !== 'unconfirmed' && !updated[idx].receivedDate
                                 ? getLocalDateString()
@@ -1317,11 +1349,32 @@ export const ComboActivitiesView: React.FC = () => {
                           };
                           setTierRewardModal({ ...tierRewardModal, tiers: updated });
                         }}
-                        className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        className="w-full px-2 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                       >
                         <option value="unconfirmed">待达成/未领取</option>
                         <option value="confirmed">已达成待入账</option>
                         <option value="claimed">已到账领取</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-3xs text-slate-500 mb-1">奖励类型 (拾零同步)</label>
+                      <select
+                        value={tier.rewardType || 'cashback'}
+                        onChange={e => {
+                          const updated = [...tierRewardModal.tiers];
+                          updated[idx] = {
+                            ...updated[idx],
+                            rewardType: e.target.value as ActivityTier['rewardType']
+                          };
+                          setTierRewardModal({ ...tierRewardModal, tiers: updated });
+                        }}
+                        className="w-full px-2 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                      >
+                        <option value="cashback">现金/刷卡金</option>
+                        <option value="voucher">立减金/红包</option>
+                        <option value="points">积分奖励</option>
+                        <option value="lottery">仅抽奖资格</option>
                       </select>
                     </div>
 
@@ -1334,11 +1387,15 @@ export const ComboActivitiesView: React.FC = () => {
                           const updated = [...tierRewardModal.tiers];
                           updated[idx] = {
                             ...updated[idx],
-                            actualReward: val
+                            actualReward: val,
+                            rewardType:
+                              val > 0 && updated[idx].rewardType === 'other'
+                                ? 'cashback'
+                                : updated[idx].rewardType
                           };
                           setTierRewardModal({ ...tierRewardModal, tiers: updated });
                         }}
-                        className="w-full px-2 py-1.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
+                        className="w-full px-2 py-2 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg"
                       />
                     </div>
 
@@ -1355,7 +1412,7 @@ export const ComboActivitiesView: React.FC = () => {
                           };
                           setTierRewardModal({ ...tierRewardModal, tiers: updated });
                         }}
-                        className="w-full px-2 py-1.5 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                        className="w-full px-2 py-2 text-xs font-mono bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                       />
                     </div>
                   </div>
@@ -1367,13 +1424,13 @@ export const ComboActivitiesView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setTierRewardModal(null)}
-                className="px-3.5 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                className="px-4 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg min-h-[40px]"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg"
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg min-h-[40px]"
               >
                 保存收益状态
               </button>
@@ -1384,10 +1441,10 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* Edit Milestone Activity Modal */}
       {editingMilestone && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleSaveMilestoneEdit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1612,7 +1669,7 @@ export const ComboActivitiesView: React.FC = () => {
                             rewardStatus: 'unconfirmed',
                             actualReward: 0,
                             receivedDate: '',
-                            rewardType: 'other',
+                            rewardType: 'cashback',
                             points: 0
                           }
                         ]
@@ -1706,10 +1763,10 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* Edit Combo Activity Modal */}
       {editingCombo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleSaveComboEdit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 my-8"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -1942,10 +1999,10 @@ export const ComboActivitiesView: React.FC = () => {
 
       {/* New Activity Modal */}
       {isNewActivityOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleCreateActivity}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">添加新达标活动</h3>

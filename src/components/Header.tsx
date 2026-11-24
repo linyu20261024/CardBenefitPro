@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { CreditCard, Sparkles, PieChart, Layers, Landmark, History, SlidersHorizontal, Download, Moon, Sun } from 'lucide-react';
+import { CreditCard, Sparkles, PieChart, Layers, Landmark, History, Download, Moon, Sun } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: string;
@@ -31,14 +31,14 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-3 sm:gap-8">
         {/* Zone 1: Brand wordmark (single element) */}
-        <div className="flex items-center gap-2.5 shrink-0 cursor-pointer" onClick={() => setActiveTab('recommend')}>
-          <div className="w-9 h-9 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 shadow-sm">
-            <CreditCard className="w-5 h-5" />
+        <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 cursor-pointer" onClick={() => setActiveTab('recommend')}>
+          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-900 dark:bg-white flex items-center justify-center text-white dark:text-slate-900 shadow-sm">
+            <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div>
-            <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
+            <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white whitespace-nowrap">
               CardBenefit Pro
             </span>
             <span className="hidden sm:inline-block ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">

@@ -12,7 +12,12 @@ import {
   getNowLocalDateTimeString,
   getMonthEndDateString,
   CARD_TYPE_LABELS,
-  inferCardType
+  inferCardType,
+  PAYMENT_CHANNEL_OPTIONS,
+  getChannelLabel,
+  getSceneLabel,
+  getActivityChannels,
+  normalizeKey
 } from '../utils/engine';
 import { FeedbackRecord, InstantRule, CardType } from '../types/cardBenefit';
 import { NumericInput } from './NumericInput';
@@ -104,12 +109,17 @@ export const LedgerFeedbackView: React.FC = () => {
   // New feedback modal
   const [isAddFeedbackOpen, setIsAddFeedbackOpen] = useState(false);
   const [newFeedbackData, setNewFeedbackData] = useState({
+    sourceKey: '',
+    ruleId: '',
     ruleName: '自定义优惠消费',
     bank: '交通银行',
     cardType: 'credit' as CardType,
     scene: 'subway',
     platform: 'transport',
     channel: 'alipay',
+    allowedChannels: PAYMENT_CHANNEL_OPTIONS.map(o => o.value),
+    isChannelRestricted: false,
+    contributedActivities: [] as string[],
     amount: 5,
     expected: 2,
     actual: 2,
@@ -130,33 +140,141 @@ export const LedgerFeedbackView: React.FC = () => {
 
   const filteredFeedback = state.feedback.filter(f => {
     if (bankFilter !== 'all' && f.bank !== bankFilter) return false;
-    if (searchQuery && !f.ruleName.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (
+      searchQuery &&
+      !f.ruleName.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !(f.bank || '').toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !getChannelLabel(f.channel).toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
     return true;
   });
 
   const filteredRules = state.rules.filter(r => {
     if (bankFilter !== 'all' && r.bank !== bankFilter) return false;
-    if (searchQuery && !r.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (
+      searchQuery &&
+      !r.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      !(r.bank || '').toLowerCase().includes(searchQuery.toLowerCase())
+    ) {
+      return false;
+    }
     return true;
   });
+
+  const handleSelectFeedbackSource = (sourceKey: string) => {
+    if (!sourceKey) {
+      setNewFeedbackData(prev => ({
+        ...prev,
+        sourceKey: '',
+        ruleId: '',
+        allowedChannels: PAYMENT_CHANNEL_OPTIONS.map(o => o.value),
+        isChannelRestricted: false,
+        contributedActivities: []
+      }));
+      return;
+    }
+
+    const [kind, id] = sourceKey.split(':');
+    if (kind === 'act') {
+      const act = state.activities.find(a => a.id === id);
+      if (!act) return;
+      const actChannels = getActivityChannels(act).filter(c => c !== 'any');
+      const actCardType = inferCardType(act);
+      const isRestricted = actChannels.length > 0;
+      const allowedList = isRestricted
+        ? actChannels
+        : actCardType === 'digital_cny'
+        ? ['digital_cny']
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+      setNewFeedbackData(prev => ({
+        ...prev,
+        sourceKey,
+        ruleId: `act-${act.id}`,
+        ruleName: `${act.name} - 活动消费记录`,
+        bank: act.bank || prev.bank,
+        cardType: actCardType,
+        scene: act.scene || 'any',
+        platform: act.platform || 'any',
+        channel: allowedList[0] || 'alipay',
+        allowedChannels: allowedList,
+        isChannelRestricted: isRestricted,
+        contributedActivities: [act.name]
+      }));
+    } else if (kind === 'combo') {
+      const combo = state.rewardActivities.find(c => c.id === id);
+      if (!combo) return;
+      const comboChs = (combo.channels || []).map(normalizeKey).filter(c => c && c !== 'any');
+      const comboCardType = inferCardType(combo);
+      const isRestricted = comboChs.length > 0;
+      const allowedList = isRestricted
+        ? comboChs
+        : comboCardType === 'digital_cny'
+        ? ['digital_cny']
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+      setNewFeedbackData(prev => ({
+        ...prev,
+        sourceKey,
+        ruleId: `combo-${combo.id}`,
+        ruleName: `${combo.name} - 打卡消费记录`,
+        bank: combo.bank || prev.bank,
+        cardType: comboCardType,
+        scene: combo.scene || 'any',
+        platform: combo.platform || 'any',
+        channel: allowedList[0] || 'alipay',
+        allowedChannels: allowedList,
+        isChannelRestricted: isRestricted,
+        contributedActivities: [combo.name]
+      }));
+    } else if (kind === 'rule') {
+      const rule = state.rules.find(r => r.id === id);
+      if (!rule) return;
+      const ruleCh = normalizeKey(rule.channel);
+      const ruleCardType = inferCardType(rule);
+      const isRestricted = Boolean(ruleCh && ruleCh !== 'any');
+      const allowedList = isRestricted
+        ? [ruleCh]
+        : ruleCardType === 'digital_cny'
+        ? ['digital_cny']
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+      setNewFeedbackData(prev => ({
+        ...prev,
+        sourceKey,
+        ruleId: rule.id,
+        ruleName: rule.name,
+        bank: rule.bank || prev.bank,
+        cardType: ruleCardType,
+        scene: rule.scene || 'any',
+        platform: rule.platform || 'any',
+        channel: allowedList[0] || 'alipay',
+        allowedChannels: allowedList,
+        isChannelRestricted: isRestricted,
+        contributedActivities: [],
+        expected: rule.fixed || prev.expected,
+        actual: rule.fixed || prev.actual
+      }));
+    }
+  };
 
   const handleAddFeedbackSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     addFeedbackRecord({
-      ruleId: `custom-${Date.now()}`,
+      ruleId: newFeedbackData.ruleId || `custom-${Date.now()}`,
       ruleName: newFeedbackData.ruleName,
       bank: newFeedbackData.bank,
       cardType: newFeedbackData.cardType,
       scene: newFeedbackData.scene,
       platform: newFeedbackData.platform,
-      channel: newFeedbackData.channel,
+      channel: normalizeKey(newFeedbackData.channel) || 'alipay',
       amount: newFeedbackData.amount,
       expected: newFeedbackData.expected,
       actual: newFeedbackData.actual,
       confirmed: true,
       result: 'confirmed',
       when: newFeedbackData.when.replace('T', ' ') || getNowLocalDateTimeString(),
-      note: newFeedbackData.note
+      note: newFeedbackData.note,
+      contributedActivities: newFeedbackData.contributedActivities
     });
     setIsAddFeedbackOpen(false);
     setToastMsg('实测消费流水已记录！');
@@ -344,7 +462,79 @@ export const LedgerFeedbackView: React.FC = () => {
       {/* View 1: Feedback Records Ledger */}
       {activeSubTab === 'feedback' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
+          {/* Mobile Card List */}
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredFeedback.length === 0 ? (
+              <div className="py-10 px-4 text-center text-xs text-slate-400">
+                暂无用卡消费实测流水记录。在「用卡推荐」点击“采纳记账”或点击上方「登记一笔实测消费」即可入账。
+              </div>
+            ) : (
+              filteredFeedback.map(item => {
+                const itemCardType = item.cardType || inferCardType({
+                  name: item.ruleName,
+                  notes: item.note,
+                  platform: item.platform,
+                  channel: item.channel
+                });
+                return (
+                  <div key={item.id} className="p-3.5 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="text-xs font-bold text-slate-900 dark:text-white leading-snug line-clamp-2">
+                          {item.ruleName}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400">
+                          <span className="font-mono">{item.when?.replace('T', ' ') || item.feedbackAt?.slice(0, 10)}</span>
+                          <span>·</span>
+                          <span>{item.bank || '合作银行'}</span>
+                          <span className={`px-1.5 py-0.2 text-3xs font-semibold rounded ${getCardTypeBadgeClass(itemCardType)}`}>
+                            {CARD_TYPE_LABELS[itemCardType]}
+                          </span>
+                          <span className="px-1.5 py-0.2 text-3xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded">
+                            {getChannelLabel(item.channel)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          -{formatCurrency(item.actual || item.expected)}
+                        </div>
+                        <div className="text-2xs font-mono text-slate-400">
+                          消费 {formatCurrency(item.amount)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1">
+                      <div className="text-2xs text-slate-400 truncate flex-1">
+                        {item.note || (item.contributedActivities?.length ? `计入: ${item.contributedActivities.join('、')}` : '已确认入账')}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => setEditingFeedback({ ...item, cardType: itemCardType })}
+                          className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                          title="编辑记录"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => deleteFeedbackRecord(item.id)}
+                          className="p-2 text-slate-400 hover:text-rose-500 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                          title="删除记录"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200 dark:border-slate-800">
                 <tr>
@@ -387,8 +577,8 @@ export const LedgerFeedbackView: React.FC = () => {
                           {CARD_TYPE_LABELS[itemCardType]}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-sans text-slate-500">
-                        {item.channel}
+                      <td className="py-3 px-4 font-sans text-slate-600 dark:text-slate-300">
+                        {getChannelLabel(item.channel)}
                       </td>
                       <td className="py-3 px-4 text-right text-slate-800 dark:text-slate-200">
                         {formatCurrency(item.amount)}
@@ -430,7 +620,136 @@ export const LedgerFeedbackView: React.FC = () => {
       {/* View 2: Rules Management */}
       {activeSubTab === 'rules' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
+          {/* Mobile Rules Card List */}
+          <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800">
+            {filteredRules.length === 0 ? (
+              <div className="py-10 px-4 text-center text-xs text-slate-400">
+                暂无用卡规则。您可以点击右上角「同步」导入您的 JSON 数据，或点击「添加新用卡规则」。
+              </div>
+            ) : (
+              filteredRules.map(rule => {
+                const ruleCardType = inferCardType(rule);
+                const usage = calculateRuleUsage(rule, state.feedback, getLocalDateString());
+                const dLimit = rule.dailyLimit ?? (rule.limitPeriod === 'day' ? rule.limit : null);
+                const wLimit = rule.weeklyLimit ?? (rule.limitPeriod === 'week' ? rule.limit : null);
+                const mLimit = rule.monthlyLimit ?? (rule.limitPeriod === 'month' ? rule.limit : null);
+                const tLimit = rule.totalLimit ?? (rule.limitPeriod === 'total' ? rule.limit : null);
+                const isExpired = Boolean(rule.dateEnd && rule.dateEnd < getLocalDateString());
+
+                return (
+                  <div key={rule.id} className={`p-3.5 space-y-2 ${rule.enabled === false ? 'opacity-55' : ''}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2 min-w-0 flex-1">
+                        <button
+                          onClick={() => toggleRule(rule.id)}
+                          className="mt-0.5 shrink-0"
+                          title={rule.enabled === false ? '启用规则' : '禁用规则'}
+                        >
+                          {rule.enabled !== false ? (
+                            <ToggleRight className="w-6 h-6 text-emerald-500" />
+                          ) : (
+                            <ToggleLeft className="w-6 h-6 text-slate-400" />
+                          )}
+                        </button>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white leading-snug">
+                              {rule.name}
+                            </span>
+                            <span className={`px-1.5 py-0.2 text-3xs font-semibold rounded ${getCardTypeBadgeClass(ruleCardType)}`}>
+                              {CARD_TYPE_LABELS[ruleCardType]}
+                            </span>
+                            {isExpired && (
+                              <span className="px-1.5 py-0.2 text-3xs font-semibold rounded bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400">
+                                已过期
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400">
+                            <span>{rule.bank || '通用'}</span>
+                            <span>·</span>
+                            <span>{getSceneLabel(rule.scene)}</span>
+                            <span>·</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-medium">{getChannelLabel(rule.channel)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0 font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        {rule.type === 'fixed'
+                          ? `立减¥${rule.fixed}`
+                          : rule.type === 'threshold'
+                          ? `满${rule.min || 0}减${rule.fixed}`
+                          : rule.type === 'rate'
+                          ? `减${rule.rate}%`
+                          : rule.type === 'cashback'
+                          ? `返¥${rule.fixed}`
+                          : rule.type === 'points'
+                          ? `${rule.fixed || rule.rate}积分`
+                          : `¥${rule.fixed || 0}`}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-1 text-2xs">
+                      <div className="flex flex-wrap items-center gap-1.5 text-slate-500">
+                        <span className="font-mono">
+                          {rule.start && rule.end && !(rule.start === '00:00' && rule.end === '23:59')
+                            ? `${rule.start}-${rule.end}`
+                            : '全天'}
+                        </span>
+                        {dLimit && dLimit > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-mono">
+                            日余{Math.max(0, dLimit - usage.dailyUsage)}/{dLimit}
+                          </span>
+                        )}
+                        {wLimit && wLimit > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-mono">
+                            周余{Math.max(0, wLimit - usage.weeklyUsage)}/{wLimit}
+                          </span>
+                        )}
+                        {mLimit && mLimit > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-mono">
+                            月余{Math.max(0, mLimit - usage.monthlyUsage)}/{mLimit}
+                          </span>
+                        )}
+                        {tLimit && tLimit > 0 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-mono">
+                            总余{Math.max(0, tLimit - usage.totalUsage)}/{tLimit}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          onClick={() => handleOpenEditRule(rule)}
+                          className="p-2 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                          title="修改规则"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`确定要删除规则「${rule.name}」吗？`)) {
+                              deleteRule(rule.id);
+                              setToastMsg(`规则「${rule.name}」已删除`);
+                              setTimeout(() => setToastMsg(null), 3000);
+                            }
+                          }}
+                          className="p-2 text-slate-400 hover:text-rose-500 bg-slate-50 dark:bg-slate-800 rounded-lg"
+                          title="删除规则"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Desktop Rules Table */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 border-b border-slate-200 dark:border-slate-800">
                 <tr>
@@ -489,10 +808,10 @@ export const LedgerFeedbackView: React.FC = () => {
                         {rule.bank || '通用'}
                       </td>
                       <td className="py-3 px-4 text-slate-500">
-                        {rule.scene}
+                        {getSceneLabel(rule.scene)}
                       </td>
-                      <td className="py-3 px-4 text-slate-500">
-                        {rule.channel}
+                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                        {getChannelLabel(rule.channel)}
                       </td>
                       <td className="py-3 px-4 font-mono font-semibold text-emerald-600 dark:text-emerald-400">
                         <div>
@@ -635,23 +954,53 @@ export const LedgerFeedbackView: React.FC = () => {
 
       {/* Add Feedback Modal */}
       {isAddFeedbackOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleAddFeedbackSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">登记一笔实测消费与优惠</h3>
               <button
                 type="button"
                 onClick={() => setIsAddFeedbackOpen(false)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 p-1.5"
               >
                 ✕
               </button>
             </div>
 
             <div className="space-y-3 text-xs">
+              {(state.activities.length > 0 || state.rewardActivities.length > 0 || state.rules.length > 0) && (
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-semibold mb-1">
+                    关联达标活动 / 规则（可选，自动匹配渠道）
+                  </label>
+                  <select
+                    value={newFeedbackData.sourceKey}
+                    onChange={e => handleSelectFeedbackSource(e.target.value)}
+                    className="w-full px-2.5 py-2.5 bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-lg text-slate-900 dark:text-white font-medium"
+                  >
+                    <option value="">自由手动录入（不关联特定活动）</option>
+                    {state.activities.map(act => (
+                      <option key={`act:${act.id}`} value={`act:${act.id}`}>
+                        [达标活动] {act.name} ({act.bank || '合作银行'})
+                      </option>
+                    ))}
+                    {state.rewardActivities.map(combo => (
+                      <option key={`combo:${combo.id}`} value={`combo:${combo.id}`}>
+                        [组合打卡] {combo.name} ({combo.bank || '合作银行'})
+                      </option>
+                    ))}
+                    {state.rules.map(rule => (
+                      <option key={`rule:${rule.id}`} value={`rule:${rule.id}`}>
+                        [用卡规则] {rule.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动 / 规则名称</label>
                 <input
@@ -678,7 +1027,7 @@ export const LedgerFeedbackView: React.FC = () => {
                   <select
                     value={newFeedbackData.cardType}
                     onChange={e => setNewFeedbackData({ ...newFeedbackData, cardType: e.target.value as CardType })}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="credit">信用卡</option>
                     <option value="debit">储蓄卡/借记卡</option>
@@ -687,20 +1036,20 @@ export const LedgerFeedbackView: React.FC = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-700 dark:text-slate-300 font-medium">支付渠道</label>
+                    {newFeedbackData.isChannelRestricted && (
+                      <span className="text-3xs text-indigo-600 dark:text-indigo-400">已匹配活动</span>
+                    )}
+                  </div>
                   <select
                     value={newFeedbackData.channel}
                     onChange={e => setNewFeedbackData({ ...newFeedbackData, channel: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="mobile_pay">手机Pay</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
-                    <option value="any">不限渠道</option>
+                    {newFeedbackData.allowedChannels.map(chVal => (
+                      <option key={chVal} value={chVal}>{getChannelLabel(chVal)}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -748,17 +1097,17 @@ export const LedgerFeedbackView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsAddFeedbackOpen(false)}
-                className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400"
+                className="px-4 py-2.5 text-xs text-slate-600 dark:text-slate-400 min-h-[40px]"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg"
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 rounded-lg min-h-[40px]"
               >
                 保存记账
               </button>
@@ -769,17 +1118,17 @@ export const LedgerFeedbackView: React.FC = () => {
 
       {/* Edit Feedback Modal */}
       {editingFeedback && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleUpdateFeedbackSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">修改实测消费记录</h3>
               <button
                 type="button"
                 onClick={() => setEditingFeedback(null)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-slate-400 hover:text-slate-600 p-1.5"
               >
                 ✕
               </button>
@@ -812,7 +1161,7 @@ export const LedgerFeedbackView: React.FC = () => {
                   <select
                     value={editingFeedback.cardType || 'any'}
                     onChange={e => setEditingFeedback({ ...editingFeedback, cardType: e.target.value as CardType })}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
                     <option value="credit">信用卡</option>
                     <option value="debit">储蓄卡/借记卡</option>
@@ -823,17 +1172,13 @@ export const LedgerFeedbackView: React.FC = () => {
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                   <select
-                    value={editingFeedback.channel}
+                    value={normalizeKey(editingFeedback.channel) || 'any'}
                     onChange={e => setEditingFeedback({ ...editingFeedback, channel: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                    className="w-full px-2.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="mobile_pay">手机Pay</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
+                    {PAYMENT_CHANNEL_OPTIONS.map(ch => (
+                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                    ))}
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
@@ -881,17 +1226,17 @@ export const LedgerFeedbackView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setEditingFeedback(null)}
-                className="px-4 py-2 text-xs text-slate-600 dark:text-slate-400"
+                className="px-4 py-2.5 text-xs text-slate-600 dark:text-slate-400 min-h-[40px]"
               >
                 取消
               </button>
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg"
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg min-h-[40px]"
               >
                 保存修改
               </button>
@@ -902,10 +1247,10 @@ export const LedgerFeedbackView: React.FC = () => {
 
       {/* Edit Rule Modal */}
       {editingRule && editRuleData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleUpdateRuleSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <div className="flex items-center gap-2">
@@ -987,17 +1332,13 @@ export const LedgerFeedbackView: React.FC = () => {
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                   <select
-                    value={editRuleData.channel}
+                    value={normalizeKey(editRuleData.channel) || 'any'}
                     onChange={e => setEditRuleData({ ...editRuleData, channel: e.target.value })}
                     className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">云闪付/银联</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="mobile_pay">手机Pay/Apple Pay</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
+                    {PAYMENT_CHANNEL_OPTIONS.map(ch => (
+                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                    ))}
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
@@ -1389,10 +1730,10 @@ export const LedgerFeedbackView: React.FC = () => {
 
       {/* Add Rule Modal */}
       {isAddRuleOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
           <form
             onSubmit={handleAddRuleSubmit}
-            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90vh] overflow-y-auto"
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-lg w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6"
           >
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">添加新卡片优惠规则</h3>
@@ -1462,17 +1803,13 @@ export const LedgerFeedbackView: React.FC = () => {
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">支付渠道</label>
                   <select
-                    value={newRuleData.channel}
+                    value={normalizeKey(newRuleData.channel) || 'any'}
                     onChange={e => setNewRuleData({ ...newRuleData, channel: e.target.value })}
                     className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="alipay">支付宝</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="mobile_pay">手机Pay</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
+                    {PAYMENT_CHANNEL_OPTIONS.map(ch => (
+                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                    ))}
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
@@ -1820,7 +2157,7 @@ export const LedgerFeedbackView: React.FC = () => {
 
       {/* Toast Notification */}
       {toastMsg && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 z-50 flex items-center gap-2 px-4 py-3 bg-slate-900 text-white text-xs font-semibold rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
           <span>✓ {toastMsg}</span>
         </div>
       )}

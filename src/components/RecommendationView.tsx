@@ -11,7 +11,15 @@ import {
   formatBigNumber,
   getLocalDateString,
   getNowLocalDateTimeString,
-  CARD_TYPE_LABELS
+  CARD_TYPE_LABELS,
+  PAYMENT_CHANNEL_OPTIONS,
+  getChannelLabel,
+  getActivityChannels,
+  intersectChannelLists,
+  inferCardType,
+  isCardTypeCompatible,
+  normalizeKey,
+  extractDateStr
 } from '../utils/engine';
 import { RecommendationResult, CardType } from '../types/cardBenefit';
 import { NumericInput } from './NumericInput';
@@ -21,12 +29,8 @@ import {
   Clock,
   CheckCircle2,
   AlertCircle,
-  ArrowRight,
-  PlusCircle,
   Tag,
   Coins,
-  Gift,
-  HelpCircle,
   Upload,
   Download
 } from 'lucide-react';
@@ -57,13 +61,7 @@ const SCENES = [
 
 const CHANNELS = [
   { id: 'any', label: '不限渠道' },
-  { id: 'alipay', label: '支付宝快捷支付' },
-  { id: 'wechat', label: '微信支付' },
-  { id: 'unionpay', label: '银联云闪付' },
-  { id: 'mobile_pay', label: '手机Pay/Apple Pay' },
-  { id: 'transit_code', label: '乘车码' },
-  { id: 'bank_app', label: '银行专属App' },
-  { id: 'digital_cny', label: '数字人民币' }
+  ...PAYMENT_CHANNEL_OPTIONS.map(o => ({ id: o.value, label: o.label }))
 ];
 
 interface RecommendationViewProps {
@@ -122,6 +120,8 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
   const [customTime, setCustomTime] = useState<string>(getNowTimeString);
   const [recordModalData, setRecordModalData] = useState<{
     result: RecommendationResult;
+    channel: string;
+    contributedActivities: string[];
     actualAmount: number;
     actualSavings: number;
     when: string;
@@ -164,10 +164,135 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
     ? eligibleRecommendations.slice(1)
     : eligibleRecommendations;
 
+  // Compute compatible activities & allowed concrete payment channels for the record confirmation modal
+  const modalChannelContext = useMemo(() => {
+    if (!recordModalData) {
+      return {
+        compatibleActivities: [] as Array<{ name: string; channels: string[]; label: string }>,
+        allowedChannels: PAYMENT_CHANNEL_OPTIONS.map(o => o.value),
+        isRestrictedByActivity: false
+      };
+    }
+
+    const { result, contributedActivities } = recordModalData;
+    const todayStr = getLocalDateString();
+
+    const compatibleList: Array<{ name: string; channels: string[]; label: string }> = [];
+
+    for (const act of state.activities) {
+      const startD = extractDateStr(act.start);
+      const endD = extractDateStr(act.end);
+      if (endD && todayStr > endD) continue;
+      if (startD && todayStr < startD) continue;
+      const actCardType = inferCardType(act);
+      if (!isCardTypeCompatible(result.cardType, actCardType, act.includedCardTypes, act.bank)) continue;
+      const bankOk =
+        act.bank === '通用/多行' ||
+        act.bank === '不限' ||
+        !act.bank ||
+        act.bank === result.bank ||
+        (act.bank === '支付宝' && result.cardType !== 'digital_cny');
+      if (!bankOk) continue;
+
+      const chs = getActivityChannels(act);
+      compatibleList.push({
+        name: act.name,
+        channels: chs,
+        label: chs.includes('any') ? '不限渠道' : chs.map(getChannelLabel).join('·')
+      });
+    }
+
+    for (const combo of state.rewardActivities) {
+      const startD = extractDateStr(combo.start);
+      const endD = extractDateStr(combo.end);
+      if (endD && todayStr > endD) continue;
+      if (startD && todayStr < startD) continue;
+      const comboCardType = inferCardType(combo);
+      if (!isCardTypeCompatible(result.cardType, comboCardType, combo.includedCardTypes, combo.bank)) continue;
+      const bankOk =
+        combo.bank === '通用/多行' ||
+        combo.bank === '不限' ||
+        !combo.bank ||
+        combo.bank === result.bank;
+      if (!bankOk) continue;
+
+      const chs = combo.channels && combo.channels.length > 0 ? combo.channels.map(normalizeKey) : ['any'];
+      compatibleList.push({
+        name: combo.name,
+        channels: chs,
+        label: chs.includes('any') ? '不限渠道' : chs.map(getChannelLabel).join('·')
+      });
+    }
+
+    // Start from rule's inherent channel constraint
+    const baseChannels =
+      result.eligibleChannels && result.eligibleChannels.length > 0
+        ? result.eligibleChannels
+        : result.cardType === 'digital_cny'
+        ? ['digital_cny']
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+
+    let allowed = baseChannels;
+    let isRestrictedByActivity = false;
+
+    for (const actName of contributedActivities) {
+      const match = compatibleList.find(item => item.name === actName);
+      if (match && !match.channels.includes('any')) {
+        allowed = intersectChannelLists(allowed, match.channels);
+        isRestrictedByActivity = true;
+      }
+    }
+
+    // Ensure concrete options (excluding 'any' so PocketGains always receives an explicit channel)
+    const concreteAllowed = allowed.filter(c => c !== 'any');
+    return {
+      compatibleActivities: compatibleList,
+      allowedChannels: concreteAllowed.length > 0 ? concreteAllowed : PAYMENT_CHANNEL_OPTIONS.map(o => o.value),
+      isRestrictedByActivity
+    };
+  }, [recordModalData, state.activities, state.rewardActivities]);
+
   const handleApplyRecommendation = (rec: RecommendationResult) => {
     const defaultWhen = customTime ? `${getLocalDateString()} ${customTime}` : getNowLocalDateTimeString();
+    const initialContributed = rec.triggeredActivityNames || [];
+
+    // Compute initial concrete channel matching the query, rule, and triggered activities
+    let candidateChannels =
+      rec.eligibleChannels && rec.eligibleChannels.length > 0
+        ? rec.eligibleChannels.filter(c => c !== 'any')
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+
+    for (const actName of initialContributed) {
+      const act = state.activities.find(a => a.name === actName);
+      if (act) {
+        candidateChannels = intersectChannelLists(candidateChannels, getActivityChannels(act));
+      }
+      const combo = state.rewardActivities.find(c => c.name === actName);
+      if (combo && combo.channels?.length) {
+        candidateChannels = intersectChannelLists(candidateChannels, combo.channels);
+      }
+    }
+    candidateChannels = candidateChannels.filter(c => c !== 'any');
+    if (candidateChannels.length === 0) {
+      candidateChannels = PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+    }
+
+    const normSelected = normalizeKey(selectedChannel);
+    const normRecCh = normalizeKey(rec.channel);
+
+    let resolvedChannel = candidateChannels[0];
+    if (normSelected && normSelected !== 'any' && candidateChannels.includes(normSelected)) {
+      resolvedChannel = normSelected;
+    } else if (normRecCh && normRecCh !== 'any' && candidateChannels.includes(normRecCh)) {
+      resolvedChannel = normRecCh;
+    } else if (rec.cardType === 'digital_cny' && candidateChannels.includes('digital_cny')) {
+      resolvedChannel = 'digital_cny';
+    }
+
     setRecordModalData({
       result: rec,
+      channel: resolvedChannel,
+      contributedActivities: initialContributed,
       actualAmount: parsedAmount,
       actualSavings: rec.instantSavings > 0 ? rec.instantSavings : rec.cashbackReward,
       when: defaultWhen,
@@ -177,7 +302,9 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
 
   const handleConfirmRecord = () => {
     if (!recordModalData) return;
-    const { result, actualAmount, actualSavings, when, note } = recordModalData;
+    const { result, channel, contributedActivities, actualAmount, actualSavings, when, note } = recordModalData;
+
+    const finalChannel = normalizeKey(channel) || 'alipay';
 
     addFeedbackRecord({
       ruleId: result.id,
@@ -186,7 +313,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       cardType: result.cardType,
       scene: selectedScene,
       platform: result.platform,
-      channel: result.channel,
+      channel: finalChannel,
       amount: actualAmount,
       expected: result.instantSavings > 0 ? result.instantSavings : result.cashbackReward,
       actual: actualSavings,
@@ -194,11 +321,13 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
       result: actualSavings >= result.instantSavings ? 'confirmed' : 'discrepancy',
       when: when.replace('T', ' ') || getNowLocalDateTimeString(),
       note: note || result.notes || '',
-      contributedActivities: result.triggeredActivityNames || []
+      contributedActivities
     });
 
     setRecordModalData(null);
-    setSuccessToast(`已成功采纳并记录！实测优惠 ${formatCurrency(actualSavings)} 已记入收益统计。`);
+    setSuccessToast(
+      `已通过「${getChannelLabel(finalChannel)}」成功记账！实测优惠 ${formatCurrency(actualSavings)} 已入账。`
+    );
     setTimeout(() => setSuccessToast(null), 3500);
   };
 
@@ -206,8 +335,8 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
     <div className="space-y-6">
       {/* Toast */}
       {successToast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
-          <CheckCircle2 className="w-5 h-5" />
+        <div className="fixed bottom-20 md:bottom-6 left-4 right-4 sm:left-auto sm:right-6 z-50 flex items-center gap-2 px-4 py-3 bg-emerald-600 text-white text-xs sm:text-sm font-medium rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+          <CheckCircle2 className="w-5 h-5 shrink-0" />
           <span>{successToast}</span>
         </div>
       )}
@@ -425,7 +554,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                   </span>
                 </div>
                 <div className="text-2xs sm:text-xs text-slate-400 font-mono truncate">
-                  {bestPick.bank} · {bestPick.channel}
+                  {bestPick.bank} · {getChannelLabel(bestPick.channel)}
                 </div>
               </div>
 
@@ -554,7 +683,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     <div>
                       <div className="flex items-center justify-between gap-1.5 mb-1">
                         <span className="text-2xs sm:text-xs font-semibold text-slate-500 dark:text-slate-400 truncate">
-                          {rec.bank} · {rec.channel}
+                          {rec.bank} · {getChannelLabel(rec.channel)}
                         </span>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className={`px-1.5 py-0.5 text-3xs font-semibold rounded ${getCardTypeBadgeClass(rec.cardType)}`}>
@@ -642,7 +771,7 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-2xs font-semibold text-slate-500 dark:text-slate-400 truncate">
-                            {rec.bank} · {rec.channel}
+                            {rec.bank} · {getChannelLabel(rec.channel)}
                           </span>
                           <div className="flex items-center gap-1 shrink-0">
                             <span className={`px-1.5 py-0.5 text-3xs font-semibold rounded ${getCardTypeBadgeClass(rec.cardType)}`}>
@@ -725,15 +854,15 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
 
       {/* Record Confirmation Modal */}
       {recordModalData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-t-2xl sm:rounded-2xl max-w-md w-full p-4 sm:p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 max-h-[90dvh] overflow-y-auto pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 确认采纳并记录优惠使用
               </h3>
               <button
                 onClick={() => setRecordModalData(null)}
-                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-semibold"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-semibold p-1.5"
               >
                 ✕
               </button>
@@ -751,42 +880,132 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                     {CARD_TYPE_LABELS[recordModalData.result.cardType]}
                   </span>
                   <span>·</span>
-                  <span>渠道: {recordModalData.result.channel}</span>
+                  <span>推荐渠道: {getChannelLabel(recordModalData.channel)}</span>
                 </div>
               </div>
 
+              {/* Channel Selection synced to rule & chosen activities */}
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
-                  实付消费金额 (元)
-                </label>
-                <NumericInput
-                  min={0}
-                  value={recordModalData.actualAmount}
-                  onValueChange={val =>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-700 dark:text-slate-300 font-semibold">
+                    实际支付渠道 <span className="text-rose-500">*</span>
+                  </label>
+                  <span className="text-3xs text-indigo-600 dark:text-indigo-400">
+                    {modalChannelContext.isRestrictedByActivity
+                      ? '已按选定活动限定渠道筛选'
+                      : normalizeKey(selectedChannel) === 'any'
+                      ? '搜索选了“不限渠道”，请确认实际付款渠道'
+                      : '已同步所选支付渠道'}
+                  </span>
+                </div>
+                <select
+                  value={recordModalData.channel}
+                  onChange={e =>
                     setRecordModalData({
                       ...recordModalData,
-                      actualAmount: val
+                      channel: e.target.value
                     })
                   }
-                  className="w-full px-3 py-2 text-sm font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                />
+                  className="w-full px-3 py-2.5 text-xs font-medium bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                >
+                  {modalChannelContext.allowedChannels.map(chVal => (
+                    <option key={chVal} value={chVal}>
+                      {getChannelLabel(chVal)}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
-                  实际享受优惠金额 (元)
-                </label>
-                <NumericInput
-                  min={0}
-                  value={recordModalData.actualSavings}
-                  onValueChange={val =>
-                    setRecordModalData({
-                      ...recordModalData,
-                      actualSavings: val
-                    })
-                  }
-                  className="w-full px-3 py-2 text-sm font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
-                />
+              {/* Optional Associated Milestone Activities */}
+              {modalChannelContext.compatibleActivities.length > 0 && (
+                <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200/70 dark:border-indigo-900/50 space-y-1.5">
+                  <div className="text-2xs font-semibold text-indigo-900 dark:text-indigo-200">
+                    同步计入达标活动（勾选后自动匹配该活动渠道）：
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {modalChannelContext.compatibleActivities.map(act => {
+                      const isChecked = recordModalData.contributedActivities.includes(act.name);
+                      return (
+                        <button
+                          key={act.name}
+                          type="button"
+                          onClick={() => {
+                            const nextContributed = isChecked
+                              ? recordModalData.contributedActivities.filter(n => n !== act.name)
+                              : [...recordModalData.contributedActivities, act.name];
+
+                            // Recalculate compatible channel immediately
+                            let nextAllowed =
+                              recordModalData.result.eligibleChannels?.filter(c => c !== 'any') ||
+                              PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+                            for (const name of nextContributed) {
+                              const found = modalChannelContext.compatibleActivities.find(x => x.name === name);
+                              if (found && !found.channels.includes('any')) {
+                                nextAllowed = intersectChannelLists(nextAllowed, found.channels);
+                              }
+                            }
+                            nextAllowed = nextAllowed.filter(c => c !== 'any');
+                            const nextChannel =
+                              nextAllowed.length > 0 && !nextAllowed.includes(recordModalData.channel)
+                                ? nextAllowed[0]
+                                : recordModalData.channel;
+
+                            setRecordModalData({
+                              ...recordModalData,
+                              contributedActivities: nextContributed,
+                              channel: nextChannel
+                            });
+                          }}
+                          className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors text-left ${
+                            isChecked
+                              ? 'bg-indigo-600 text-white border-indigo-600 font-semibold'
+                              : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {isChecked ? '✓ ' : '+ '}
+                          {act.name}
+                          <span className="opacity-75 ml-1">({act.label})</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    实付消费金额 (元)
+                  </label>
+                  <NumericInput
+                    min={0}
+                    value={recordModalData.actualAmount}
+                    onValueChange={val =>
+                      setRecordModalData({
+                        ...recordModalData,
+                        actualAmount: val
+                      })
+                    }
+                    className="w-full px-3 py-2 text-sm font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                    实际享受优惠 (元)
+                  </label>
+                  <NumericInput
+                    min={0}
+                    value={recordModalData.actualSavings}
+                    onValueChange={val =>
+                      setRecordModalData({
+                        ...recordModalData,
+                        actualSavings: val
+                      })
+                    }
+                    className="w-full px-3 py-2 text-sm font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"
+                  />
+                </div>
               </div>
 
               <div>
@@ -825,18 +1044,18 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setRecordModalData(null)}
-                className="px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
+                className="px-4 py-2.5 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors min-h-[40px]"
               >
                 取消
               </button>
               <button
                 type="button"
                 onClick={handleConfirmRecord}
-                className="px-4 py-2 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 rounded-lg transition-colors"
+                className="flex-1 sm:flex-initial px-5 py-2.5 text-xs font-bold text-white bg-slate-900 dark:bg-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200 rounded-lg transition-colors min-h-[40px]"
               >
                 确认记录
               </button>

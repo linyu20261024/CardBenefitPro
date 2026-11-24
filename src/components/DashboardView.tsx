@@ -8,7 +8,8 @@ import { useCardBenefit } from '../context/CardBenefitContext';
 import {
   formatCurrency,
   getLocalDateString,
-  evaluateRecommendations
+  evaluateRecommendations,
+  getChannelLabel
 } from '../utils/engine';
 import {
   TrendingUp,
@@ -456,7 +457,7 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {/* Filtered Recent Feedback Records Ledger */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-2xs space-y-4">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <h3 className="text-sm font-bold text-slate-900 dark:text-white">
             近期实测优惠打卡记录 ({filteredFeedback.length})
@@ -468,7 +469,7 @@ export const DashboardView: React.FC = () => {
               <select
                 value={selectedBankFilter}
                 onChange={e => setSelectedBankFilter(e.target.value)}
-                className="px-2 py-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs text-slate-800 dark:text-slate-200"
+                className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md text-xs text-slate-800 dark:text-slate-200"
               >
                 <option value="all">全部银行 ({feedbackBanks.length}家)</option>
                 {feedbackBanks.map(b => (
@@ -484,50 +485,85 @@ export const DashboardView: React.FC = () => {
             暂无符合筛选条件的实测记录
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-100 dark:border-slate-800">
-                <tr>
-                  <th className="py-2.5 px-3 font-semibold">记录时间</th>
-                  <th className="py-2.5 px-3 font-semibold">用卡规则 / 活动</th>
-                  <th className="py-2.5 px-3 font-semibold">发卡机构</th>
-                  <th className="py-2.5 px-3 font-semibold">渠道</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">消费金额</th>
-                  <th className="py-2.5 px-3 font-semibold text-right">实际优惠</th>
-                  <th className="py-2.5 px-3 font-semibold text-center">状态</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
-                {filteredFeedback.slice(0, 8).map(record => (
-                  <tr key={record.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                    <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
-                      {record.when?.replace('T', ' ') || record.feedbackAt?.slice(0, 10)}
-                    </td>
-                    <td className="py-2.5 px-3 font-sans font-medium text-slate-900 dark:text-white max-w-xs truncate">
-                      {record.ruleName}
-                    </td>
-                    <td className="py-2.5 px-3 font-sans text-slate-600 dark:text-slate-300">
-                      {record.bank || '合作银行'}
-                    </td>
-                    <td className="py-2.5 px-3 font-sans text-slate-500">
-                      {record.channel || '快捷支付'}
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-300">
-                      {formatCurrency(record.amount)}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
-                      -{formatCurrency(record.actual || record.expected)}
-                    </td>
-                    <td className="py-2.5 px-3 text-center">
-                      <span className="font-sans text-2xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
-                        已确认
-                      </span>
-                    </td>
+          <>
+            {/* Mobile Card List */}
+            <div className="md:hidden divide-y divide-slate-100 dark:divide-slate-800/70">
+              {filteredFeedback.slice(0, 8).map(record => (
+                <div key={record.id} className="py-3 first:pt-1 last:pb-1 space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                        {record.ruleName}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-2xs text-slate-500 dark:text-slate-400 mt-0.5">
+                        <span className="font-mono">{record.when?.replace('T', ' ') || record.feedbackAt?.slice(0, 10)}</span>
+                        <span>·</span>
+                        <span>{record.bank || '合作银行'}</span>
+                        <span>·</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-medium">
+                          {getChannelLabel(record.channel)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 font-mono">
+                      <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        -{formatCurrency(record.actual || record.expected)}
+                      </div>
+                      <div className="text-3xs text-slate-400">
+                        消费 {formatCurrency(record.amount)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 border-y border-slate-100 dark:border-slate-800">
+                  <tr>
+                    <th className="py-2.5 px-3 font-semibold">记录时间</th>
+                    <th className="py-2.5 px-3 font-semibold">用卡规则 / 活动</th>
+                    <th className="py-2.5 px-3 font-semibold">发卡机构</th>
+                    <th className="py-2.5 px-3 font-semibold">渠道</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">消费金额</th>
+                    <th className="py-2.5 px-3 font-semibold text-right">实际优惠</th>
+                    <th className="py-2.5 px-3 font-semibold text-center">状态</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
+                  {filteredFeedback.slice(0, 8).map(record => (
+                    <tr key={record.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 text-slate-500 whitespace-nowrap">
+                        {record.when?.replace('T', ' ') || record.feedbackAt?.slice(0, 10)}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans font-medium text-slate-900 dark:text-white max-w-xs truncate">
+                        {record.ruleName}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans text-slate-600 dark:text-slate-300">
+                        {record.bank || '合作银行'}
+                      </td>
+                      <td className="py-2.5 px-3 font-sans text-slate-500">
+                        {getChannelLabel(record.channel)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-slate-700 dark:text-slate-300">
+                        {formatCurrency(record.amount)}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                        -{formatCurrency(record.actual || record.expected)}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className="font-sans text-2xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950 px-1.5 py-0.5 rounded">
+                          已确认
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

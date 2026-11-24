@@ -46,15 +46,36 @@ export const PAYMENT_CHANNEL_OPTIONS: Array<{ value: string; label: string }> = 
   { value: 'digital_cny', label: '数字人民币' }
 ];
 
+export const SPEND_SCENE_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'subway', label: '地铁出行' },
+  { value: 'bus', label: '公交车' },
+  { value: 'shared_bike', label: '共享单车' },
+  { value: 'dining', label: '餐饮美食' },
+  { value: 'shopping', label: '商超零售' },
+  { value: 'online_shop', label: '网上电商' },
+  { value: 'entertainment', label: '休闲娱乐' },
+  { value: 'bills', label: '生活缴费' },
+  { value: 'transport', label: '交通出行' },
+  { value: 'other', label: '其他消费' },
+  { value: 'any', label: '通用消费' }
+];
+
 export function normalizeKey(val?: string): string {
   return (val || '').trim().toLowerCase().replace(/-/g, '_');
 }
 
-export function getChannelLabel(ch: string): string {
+export function getSceneLabel(sc?: string): string {
+  const norm = normalizeKey(sc);
+  if (!norm || norm === 'any') return '通用消费';
+  const matched = SPEND_SCENE_OPTIONS.find(opt => opt.value === norm);
+  return matched ? matched.label : sc || '通用消费';
+}
+
+export function getChannelLabel(ch?: string): string {
   const norm = normalizeKey(ch);
   if (!norm || norm === 'any') return '不限渠道';
   const matched = PAYMENT_CHANNEL_OPTIONS.find(opt => opt.value === norm);
-  return matched ? matched.label : ch;
+  return matched ? matched.label : ch || '不限渠道';
 }
 
 export function getActivityChannels(act: { channel?: string; channels?: string[] }): string[] {
@@ -70,6 +91,19 @@ export function formatChannelList(act: { channel?: string; channels?: string[] }
   const list = getActivityChannels(act);
   if (list.includes('any')) return '不限渠道';
   return list.map(getChannelLabel).join(' · ');
+}
+
+export function intersectChannelLists(listA: string[], listB: string[]): string[] {
+  const a = listA.map(normalizeKey).filter(Boolean);
+  const b = listB.map(normalizeKey).filter(Boolean);
+  const aAny = a.length === 0 || a.includes('any');
+  const bAny = b.length === 0 || b.includes('any');
+  if (aAny && bAny) return PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+  if (aAny) return b.filter(c => c !== 'any');
+  if (bAny) return a.filter(c => c !== 'any');
+  const setB = new Set(b);
+  const intersection = a.filter(c => setB.has(c));
+  return intersection.length > 0 ? intersection : a.filter(c => c !== 'any');
 }
 
 /**
@@ -544,7 +578,8 @@ export function evaluateRecommendations(
       const actChannels = getActivityChannels(act);
       const channelMatches =
         actChannels.includes('any') ||
-        (effectiveRuleChannel !== 'any' && actChannels.includes(effectiveRuleChannel));
+        effectiveRuleChannel === 'any' ||
+        actChannels.includes(effectiveRuleChannel);
       if (!channelMatches) continue;
 
       const normActScene = normalizeKey(act.scene) || 'any';
@@ -557,11 +592,15 @@ export function evaluateRecommendations(
 
       const curSpend = act.currentSpend || 0;
       const nextHitTier = act.tiers.find(t => curSpend < t.target && curSpend + amount >= t.target);
+      const channelNote =
+        !actChannels.includes('any') && effectiveRuleChannel === 'any'
+          ? `（限${formatChannelList(act)}）`
+          : '';
       if (nextHitTier) {
-        triggeredMilestones.push(`叠加推进【${act.name}】达标¥${nextHitTier.target} (${nextHitTier.rewardName})`);
+        triggeredMilestones.push(`叠加推进【${act.name}】达标¥${nextHitTier.target} (${nextHitTier.rewardName})${channelNote}`);
         triggeredActivityNames.push(act.name);
       } else if (act.tiers.some(t => curSpend < t.target)) {
-        triggeredMilestones.push(`计入【${act.name}】累计消费`);
+        triggeredMilestones.push(`计入【${act.name}】累计消费${channelNote}`);
         triggeredActivityNames.push(act.name);
       }
     }
@@ -584,11 +623,12 @@ export function evaluateRecommendations(
         (Boolean(combo.bank) && combo.bank === rule.bank);
       if (!bankMatches) continue;
 
-      const normComboChannels = (combo.channels || []).map(c => normalizeKey(c));
+      const normComboChannels = (combo.channels || []).map(c => normalizeKey(c)).filter(Boolean);
       const channelMatches =
         normComboChannels.length === 0 ||
         normComboChannels.includes('any') ||
-        (effectiveRuleChannel !== 'any' && normComboChannels.includes(effectiveRuleChannel));
+        effectiveRuleChannel === 'any' ||
+        normComboChannels.includes(effectiveRuleChannel);
       if (!channelMatches) continue;
 
       const normComboScene = normalizeKey(combo.scene) || 'any';
@@ -619,6 +659,36 @@ export function evaluateRecommendations(
       }
     }
 
+    // Compute exact eligible channels for this recommendation
+    let ruleEligibleChannels: string[] =
+      normRuleChannel !== 'any'
+        ? [normRuleChannel]
+        : normQueryChannel !== 'any'
+        ? [normQueryChannel]
+        : ruleCardType === 'digital_cny'
+        ? ['digital_cny']
+        : PAYMENT_CHANNEL_OPTIONS.map(o => o.value);
+
+    for (const actName of triggeredActivityNames) {
+      const matchedAct = activities.find(a => a.name === actName);
+      if (matchedAct) {
+        ruleEligibleChannels = intersectChannelLists(ruleEligibleChannels, getActivityChannels(matchedAct));
+      }
+      const matchedCombo = rewardActivities.find(c => c.name === actName);
+      if (matchedCombo && matchedCombo.channels?.length) {
+        ruleEligibleChannels = intersectChannelLists(ruleEligibleChannels, matchedCombo.channels);
+      }
+    }
+
+    const displayChannel =
+      normRuleChannel !== 'any'
+        ? normRuleChannel
+        : normQueryChannel !== 'any'
+        ? normQueryChannel
+        : triggeredActivityNames.length > 0 && ruleEligibleChannels.length > 0 && ruleEligibleChannels.length < PAYMENT_CHANNEL_OPTIONS.length
+        ? ruleEligibleChannels[0]
+        : 'any';
+
     const pointsValue = pointsReward * POINTS_RMB_RATE;
     const totalEffectiveBenefit = instantSavings + cashbackReward + pointsValue + lotteryValue;
     const effectiveDiscountRate = amount > 0 ? (totalEffectiveBenefit / amount) * 100 : 0;
@@ -628,7 +698,8 @@ export function evaluateRecommendations(
       name: rule.name,
       bank: rule.bank || '通用银行',
       cardType: ruleCardType,
-      channel: rule.channel,
+      channel: displayChannel,
+      eligibleChannels: ruleEligibleChannels,
       scene: rule.scene,
       platform: rule.platform,
       type: rule.type,
@@ -692,12 +763,23 @@ export function evaluateRecommendations(
         const estVal = tier.estimatedReward || (tier.rewardType === 'points' ? tier.points * POINTS_RMB_RATE : 15);
         const hitReward = tier.actualReward || estVal;
         
+        const resolvedActChannel =
+          normQueryChannel !== 'any' && actChannels.includes(normQueryChannel)
+            ? normQueryChannel
+            : actChannels.find(c => c !== 'any') || (actCardType === 'digital_cny' ? 'digital_cny' : 'any');
+        const actEligibleChannels = actChannels.includes('any')
+          ? actCardType === 'digital_cny'
+            ? ['digital_cny']
+            : PAYMENT_CHANNEL_OPTIONS.map(o => o.value)
+          : actChannels;
+
         results.push({
           id: `${act.id}-${tier.id}`,
           name: `${act.name} (满¥${tier.target}阶梯达成)`,
           bank: act.bank || '合作银行',
           cardType: actCardType,
-          channel: act.channel,
+          channel: resolvedActChannel,
+          eligibleChannels: actEligibleChannels,
           scene: act.scene,
           platform: act.platform,
           type: 'cashback',
