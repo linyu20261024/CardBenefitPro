@@ -14,6 +14,7 @@ import {
   CARD_TYPE_LABELS
 } from '../utils/engine';
 import { RecommendationResult, CardType } from '../types/cardBenefit';
+import { NumericInput } from './NumericInput';
 import {
   Sparkles,
   TrendingUp,
@@ -758,14 +759,13 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                 <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
                   实付消费金额 (元)
                 </label>
-                <input
-                  type="number"
-                  step="any"
+                <NumericInput
+                  min={0}
                   value={recordModalData.actualAmount}
-                  onChange={e =>
+                  onValueChange={val =>
                     setRecordModalData({
                       ...recordModalData,
-                      actualAmount: parseFloat(e.target.value) || 0
+                      actualAmount: val
                     })
                   }
                   className="w-full px-3 py-2 text-sm font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
@@ -776,14 +776,13 @@ export const RecommendationView: React.FC<RecommendationViewProps> = ({ onOpenSy
                 <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
                   实际享受优惠金额 (元)
                 </label>
-                <input
-                  type="number"
-                  step="any"
+                <NumericInput
+                  min={0}
                   value={recordModalData.actualSavings}
-                  onChange={e =>
+                  onValueChange={val =>
                     setRecordModalData({
                       ...recordModalData,
-                      actualSavings: parseFloat(e.target.value) || 0
+                      actualSavings: val
                     })
                   }
                   className="w-full px-3 py-2 text-sm font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg"

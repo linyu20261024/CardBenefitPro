@@ -11,9 +11,14 @@ import {
   getMonthEndDateString,
   getNowLocalDateTimeString,
   CARD_TYPE_LABELS,
-  inferCardType
+  inferCardType,
+  PAYMENT_CHANNEL_OPTIONS,
+  getActivityChannels,
+  formatChannelList,
+  getChannelLabel
 } from '../utils/engine';
 import { inferBankName } from '../data/initialData';
+import { NumericInput } from './NumericInput';
 import { MilestoneActivity, RewardComboActivity, ActivityTier, ComboRule, CardType } from '../types/cardBenefit';
 import {
   Sparkles,
@@ -93,15 +98,27 @@ export const ComboActivitiesView: React.FC = () => {
   const [newActivityIncludedCardTypes, setNewActivityIncludedCardTypes] = useState<CardType[]>(['credit', 'debit']);
   const [newActivityCategory, setNewActivityCategory] = useState<'quickpay' | 'spend' | 'general'>('quickpay');
   const [newActivityExcludeRecommend, setNewActivityExcludeRecommend] = useState<boolean>(false);
-  const [newActivityChannel, setNewActivityChannel] = useState('alipay');
+  const [newActivityChannels, setNewActivityChannels] = useState<string[]>(['alipay']);
   const [newActivityStart, setNewActivityStart] = useState(() => `${getLocalDateString().slice(0, 7)}-01`);
   const [newActivityEnd, setNewActivityEnd] = useState(() => getMonthEndDateString(getLocalDateString().slice(0, 7)));
-  const [newActivityNotes, setNewActivityNotes] = useState('支付宝快捷支付消费达标赢立减金与抽奖');
+  const [newActivityNotes, setNewActivityNotes] = useState(
+    '报名路径：无需报名 / 支付宝App内查看\n排除范围：转账、红包、生活缴费不计入\n领奖方式：达标后立减金自动到账卡包'
+  );
   const [newActivityTiers, setNewActivityTiers] = useState<Array<{ target: number; rewardName: string; estimatedReward: number }>>([
     { target: 1000, rewardName: '5元立减金', estimatedReward: 5 },
     { target: 3000, rewardName: '15元红包', estimatedReward: 15 },
     { target: 5000, rewardName: '88元锦鲤抽奖', estimatedReward: 20 }
   ]);
+
+  const toggleChannelSelection = (current: string[], target: string): string[] => {
+    if (target === 'any') {
+      return ['any'];
+    }
+    const withoutAny = current.filter(c => c !== 'any');
+    const exists = withoutAny.includes(target);
+    const next = exists ? withoutAny.filter(c => c !== target) : [...withoutAny, target];
+    return next.length > 0 ? next : ['any'];
+  };
 
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
@@ -140,9 +157,10 @@ export const ComboActivitiesView: React.FC = () => {
         if (!matchName && !matchNotes && !matchBank && !matchTiers) return false;
       }
       if (activeCategory === 'quickpay') {
+        const chs = getActivityChannels(act);
         return (
           act.category === 'quickpay' ||
-          act.channel === 'alipay' ||
+          chs.includes('alipay') ||
           act.name.includes('快捷') ||
           act.name.includes('支付宝')
         );
@@ -236,7 +254,8 @@ export const ComboActivitiesView: React.FC = () => {
       category: newActivityCategory,
       excludeFromRecommend: newActivityExcludeRecommend,
       platform: 'any',
-      channel: newActivityChannel,
+      channel: newActivityChannels.includes('any') || newActivityChannels.length === 0 ? 'any' : newActivityChannels[0],
+      channels: newActivityChannels.length > 0 ? newActivityChannels : ['any'],
       scene: 'any',
       start: newActivityStart || getLocalDateString(),
       end: newActivityEnd || getMonthEndDateString(getLocalDateString().slice(0, 7)),
@@ -307,8 +326,10 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityIncludedCardTypes([]);
       setNewActivityCategory('quickpay');
       setNewActivityExcludeRecommend(true);
-      setNewActivityChannel('any');
-      setNewActivityNotes('储蓄卡绑定支付宝/微信/抖音等快捷支付达标领立减金（仅记账与收益统计，不参与用卡推荐）');
+      setNewActivityChannels(['alipay', 'wechat', 'unionpay', 'douyin', 'jd']);
+      setNewActivityNotes(
+        '报名路径：银行App活动专区报名参与\n限制条件：单笔满10元计入，不含转账、缴费及零钱通充值\n领奖方式：达标后在活动页手动领取立减金，有效期7天'
+      );
       setNewActivityTiers([
         { target: 1000, rewardName: '5元微信立减金', estimatedReward: 5 },
         { target: 5000, rewardName: '15元立减金', estimatedReward: 15 }
@@ -320,8 +341,10 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityIncludedCardTypes(['credit', 'debit']);
       setNewActivityCategory('quickpay');
       setNewActivityExcludeRecommend(false);
-      setNewActivityChannel('alipay');
-      setNewActivityNotes('绑定银行卡快捷支付消费，满1000返5元，满3000送15元，满5000抽大奖88元');
+      setNewActivityChannels(['alipay']);
+      setNewActivityNotes(
+        '报名路径：支付宝搜索“快捷支付有礼”确认名额\n排除范围：余额宝/花呗还款/转账不计入累计\n领奖方式：达标后即时弹窗发放红包或抽奖资格'
+      );
       setNewActivityTiers([
         { target: 1000, rewardName: '5元刷卡金', estimatedReward: 5 },
         { target: 3000, rewardName: '15元刷卡金', estimatedReward: 15 },
@@ -334,8 +357,10 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityIncludedCardTypes([]);
       setNewActivityCategory('spend');
       setNewActivityExcludeRecommend(false);
-      setNewActivityChannel('any');
-      setNewActivityNotes('当月信用卡消费满5000元给1次抽奖，满8000元再给1次抽奖机会（数币/储蓄卡不计入）');
+      setNewActivityChannels(['any']);
+      setNewActivityNotes(
+        '统计范围：仅限主卡信用卡境内计积分消费（数币/储蓄卡不计入）\n达标门槛：累计满5000元抽1次，满8000元再抽1次'
+      );
       setNewActivityTiers([
         { target: 5000, rewardName: '抽奖机会1次', estimatedReward: 15 },
         { target: 8000, rewardName: '二重抽奖机会', estimatedReward: 20 }
@@ -347,8 +372,10 @@ export const ComboActivitiesView: React.FC = () => {
       setNewActivityIncludedCardTypes([]);
       setNewActivityCategory('spend');
       setNewActivityExcludeRecommend(false);
-      setNewActivityChannel('any');
-      setNewActivityNotes('信用卡消费满额赠送海量综合积分');
+      setNewActivityChannels(['wechat', 'alipay']);
+      setNewActivityNotes(
+        '报名路径：需在银行App提前领取或开通多倍积分包\n统计范围：指定快捷支付渠道消费满额赠送额外综合积分'
+      );
       setNewActivityTiers([
         { target: 2000, rewardName: '赠2000积分', estimatedReward: 4 },
         { target: 5000, rewardName: '赠6000积分', estimatedReward: 12 },
@@ -646,34 +673,46 @@ export const ComboActivitiesView: React.FC = () => {
                         )}
                       </div>
                       <div
-                        className={`text-xs mt-0.5 flex flex-wrap items-center gap-3 ${
+                        className={`text-xs mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 ${
                           isAlipayQuickpay ? 'text-slate-300' : 'text-slate-500 dark:text-slate-400'
                         }`}
                       >
                         <span>
                           有效期: {activity.start} ~ {activity.end}
                         </span>
-                        <span>渠道: {activity.channel === 'any' ? '不限渠道' : activity.channel}</span>
-                        {activity.notes && <span>· {activity.notes}</span>}
+                        <span>指定渠道: {formatChannelList(activity)}</span>
                       </div>
+                      {activity.notes && (
+                        <div
+                          className={`mt-2 px-3 py-2 rounded-lg text-2xs leading-relaxed whitespace-pre-line border ${
+                            isAlipayQuickpay
+                              ? 'bg-white/5 border-white/10 text-slate-200'
+                              : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200/70 dark:border-slate-700/70 text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          {activity.notes}
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0 flex-wrap">
                     <button
-                      onClick={() =>
+                      onClick={() => {
+                        const actChannels = getActivityChannels(activity);
+                        const defaultCh = actChannels.find(c => c !== 'any') || (actCardType === 'digital_cny' ? 'digital_cny' : 'alipay');
                         setQuickSpendModal({
                           targetActivity: activity.name,
                           amount: nextTier ? Math.max(10, nextTier.target - currentSpend) : 100,
-                          channel: activity.channel === 'any' ? (actCardType === 'digital_cny' ? 'digital_cny' : 'alipay') : activity.channel,
+                          channel: defaultCh,
                           bank: displayBank,
                           cardType: actCardType,
                           when: getNowLocalDateTimeString(),
                           actualReward: 0,
                           note: ''
-                        })
-                      }
+                        });
+                      }}
                       className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-xs ${
                         isAlipayQuickpay
                           ? 'bg-sky-400 hover:bg-sky-300 text-slate-950'
@@ -706,6 +745,7 @@ export const ComboActivitiesView: React.FC = () => {
                           ...activity,
                           bank: displayBank,
                           cardType: actCardType,
+                          channels: getActivityChannels(activity),
                           includedCardTypes: activity.includedCardTypes || []
                         })
                       }
@@ -894,7 +934,7 @@ export const ComboActivitiesView: React.FC = () => {
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 min-w-0">
                               <span className="font-mono opacity-75">{rec.when?.replace('T', ' ') || rec.feedbackAt?.slice(0, 10)}</span>
                               <span className="font-bold font-mono">消费 {formatCurrency(rec.amount)}</span>
-                              <span className="opacity-75">渠道: {rec.channel}</span>
+                              <span className="opacity-75">渠道: {getChannelLabel(rec.channel)}</span>
                               {rec.actual > 0 && (
                                 <span className="text-emerald-400 font-semibold font-mono">
                                   即时收益 +{formatCurrency(rec.actual)}
@@ -967,6 +1007,11 @@ export const ComboActivitiesView: React.FC = () => {
                       <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                         支持日达标、周达标、连续周达标与指定日加码 · {combo.start} ~ {combo.end}
                       </div>
+                      {combo.notes && (
+                        <div className="mt-1.5 text-2xs text-slate-500 dark:text-slate-400 whitespace-pre-line">
+                          {combo.notes}
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -1091,14 +1136,13 @@ export const ComboActivitiesView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本次消费金额 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={quickSpendModal.amount}
-                    onChange={e =>
+                    onValueChange={val =>
                       setQuickSpendModal({
                         ...quickSpendModal,
-                        amount: parseFloat(e.target.value) || 0
+                        amount: val
                       })
                     }
                     className="w-full px-3 py-2 text-base font-bold font-mono bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
@@ -1106,15 +1150,13 @@ export const ComboActivitiesView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">本笔即时实得收益 (元/可选)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={quickSpendModal.actualReward}
-                    onChange={e =>
+                    onValueChange={val =>
                       setQuickSpendModal({
                         ...quickSpendModal,
-                        actualReward: parseFloat(e.target.value) || 0
+                        actualReward: val
                       })
                     }
                     placeholder="0 表示仅累计达标额"
@@ -1155,12 +1197,9 @@ export const ComboActivitiesView: React.FC = () => {
                     }
                     className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   >
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">银联云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
+                    {PAYMENT_CHANNEL_OPTIONS.map(ch => (
+                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                    ))}
                     <option value="any">不限渠道</option>
                   </select>
                 </div>
@@ -1288,16 +1327,14 @@ export const ComboActivitiesView: React.FC = () => {
 
                     <div>
                       <label className="block text-3xs text-slate-500 mb-1">实际收益金额 (元)</label>
-                      <input
-                        type="number"
-                        step="any"
-                        min="0"
+                      <NumericInput
+                        min={0}
                         value={tier.actualReward || 0}
-                        onChange={e => {
+                        onValueChange={val => {
                           const updated = [...tierRewardModal.tiers];
                           updated[idx] = {
                             ...updated[idx],
-                            actualReward: parseFloat(e.target.value) || 0
+                            actualReward: val
                           };
                           setTierRewardModal({ ...tierRewardModal, tiers: updated });
                         }}
@@ -1378,7 +1415,7 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行</label>
                   <input
@@ -1401,21 +1438,65 @@ export const ComboActivitiesView: React.FC = () => {
                     <option value="any">通用/跨卡种</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定渠道</label>
-                  <select
-                    value={editingMilestone.channel}
-                    onChange={e => setEditingMilestone({ ...editingMilestone, channel: e.target.value })}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  >
-                    <option value="any">不限渠道</option>
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">银联云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
-                  </select>
+              </div>
+
+              {/* Multi-select Payment Channels */}
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                    指定支付渠道 <span className="font-normal text-slate-400">(支持多选，不限则选“不限渠道”)</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(() => {
+                    const currentChs = getActivityChannels(editingMilestone);
+                    const isAny = currentChs.includes('any');
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEditingMilestone({
+                              ...editingMilestone,
+                              channel: 'any',
+                              channels: ['any']
+                            })
+                          }
+                          className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                            isAny
+                              ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white font-bold'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          不限渠道
+                        </button>
+                        {PAYMENT_CHANNEL_OPTIONS.map(opt => {
+                          const selected = !isAny && currentChs.includes(opt.value);
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() => {
+                                const next = toggleChannelSelection(currentChs, opt.value);
+                                setEditingMilestone({
+                                  ...editingMilestone,
+                                  channels: next,
+                                  channel: next.includes('any') ? 'any' : next[0]
+                                });
+                              }}
+                              className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                                selected
+                                  ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {selected ? `✓ ${opt.label}` : opt.label}
+                            </button>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 
@@ -1460,7 +1541,7 @@ export const ComboActivitiesView: React.FC = () => {
                 </label>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">开始日期</label>
                   <input
@@ -1479,31 +1560,35 @@ export const ComboActivitiesView: React.FC = () => {
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">当前累计已消费 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={editingMilestone.currentSpend ?? 0}
-                    onChange={e =>
-                      setEditingMilestone({ ...editingMilestone, currentSpend: parseFloat(e.target.value) || 0 })
+                    onValueChange={val =>
+                      setEditingMilestone({ ...editingMilestone, currentSpend: val })
                     }
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
-                  <input
-                    type="text"
-                    value={editingMilestone.notes || ''}
-                    onChange={e => setEditingMilestone({ ...editingMilestone, notes: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                  />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium">
+                    活动规则说明与注意事项 <span className="text-2xs font-normal text-slate-400">(支持回车换行，展示于活动卡面备忘)</span>
+                  </label>
                 </div>
+                <p className="text-3xs text-slate-500 dark:text-slate-400 mb-1.5 leading-relaxed">
+                  用途：仅用于备忘官方规则防踩坑（不直接参与数值计算）。建议分条填写：① 报名/领券路径；② 单笔最低金额及排除项（如转账/红包/缴费）；③ 名额限制与达标后领奖途径/有效期。
+                </p>
+                <textarea
+                  rows={4}
+                  value={editingMilestone.notes || ''}
+                  onChange={e => setEditingMilestone({ ...editingMilestone, notes: e.target.value })}
+                  placeholder={'示例：\n报名路径：银行App搜索“快捷支付”报名\n限制条件：单笔满10元计入，不含转账、缴费与零钱通充值\n领奖方式：达标次日10点起活动页领立减金，7天有效'}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white leading-relaxed resize-y"
+                />
               </div>
 
               {/* Tiers list editor */}
@@ -1544,12 +1629,12 @@ export const ComboActivitiesView: React.FC = () => {
                     <div key={tier.id || idx} className="flex items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700">
                       <span className="text-2xs font-mono text-slate-400 w-8">#{idx + 1}</span>
                       <div className="w-24">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.target}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...editingMilestone.tiers];
-                            updated[idx] = { ...updated[idx], target: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], target: val };
                             setEditingMilestone({ ...editingMilestone, tiers: updated });
                           }}
                           placeholder="满额(元)"
@@ -1570,12 +1655,12 @@ export const ComboActivitiesView: React.FC = () => {
                         />
                       </div>
                       <div className="w-20">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.estimatedReward}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...editingMilestone.tiers];
-                            updated[idx] = { ...updated[idx], estimatedReward: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], estimatedReward: val };
                             setEditingMilestone({ ...editingMilestone, tiers: updated });
                           }}
                           placeholder="价值(元)"
@@ -1717,6 +1802,68 @@ export const ComboActivitiesView: React.FC = () => {
                 </label>
               </div>
 
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                  指定支付渠道 <span className="font-normal text-slate-400">(支持多选)</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {(() => {
+                    const currentChs = editingCombo.channels && editingCombo.channels.length > 0 ? editingCombo.channels : ['any'];
+                    const isAny = currentChs.includes('any');
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => setEditingCombo({ ...editingCombo, channels: ['any'] })}
+                          className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                            isAny
+                              ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white font-bold'
+                              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          不限渠道
+                        </button>
+                        {PAYMENT_CHANNEL_OPTIONS.map(opt => {
+                          const selected = !isAny && currentChs.includes(opt.value);
+                          return (
+                            <button
+                              key={opt.value}
+                              type="button"
+                              onClick={() =>
+                                setEditingCombo({
+                                  ...editingCombo,
+                                  channels: toggleChannelSelection(currentChs, opt.value)
+                                })
+                              }
+                              className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                                selected
+                                  ? 'bg-purple-600 text-white border-purple-600 font-bold'
+                                  : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                              }`}
+                            >
+                              {selected ? `✓ ${opt.label}` : opt.label}
+                            </button>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                  活动总说明与注意事项 <span className="text-2xs font-normal text-slate-400">(支持回车换行，备忘报名/排除项)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  value={editingCombo.notes || ''}
+                  onChange={e => setEditingCombo({ ...editingCombo, notes: e.target.value })}
+                  placeholder="可分行填写报名入口、排除商户及达标领奖方式..."
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white leading-relaxed resize-y"
+                />
+              </div>
+
               {/* Combo rules editor */}
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">各阶段打卡规则明细</label>
@@ -1730,12 +1877,12 @@ export const ComboActivitiesView: React.FC = () => {
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-3xs text-slate-400">门槛金额 (元)</label>
-                          <input
-                            type="number"
+                          <NumericInput
+                            min={0}
                             value={rule.amount}
-                            onChange={e => {
+                            onValueChange={val => {
                               const updated = [...editingCombo.rules];
-                              updated[idx] = { ...updated[idx], amount: parseFloat(e.target.value) || 0 };
+                              updated[idx] = { ...updated[idx], amount: val };
                               setEditingCombo({ ...editingCombo, rules: updated });
                             }}
                             className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-mono"
@@ -1743,12 +1890,12 @@ export const ComboActivitiesView: React.FC = () => {
                         </div>
                         <div>
                           <label className="text-3xs text-slate-400">奖励数值 (积分/现金)</label>
-                          <input
-                            type="number"
+                          <NumericInput
+                            min={0}
                             value={rule.reward}
-                            onChange={e => {
+                            onValueChange={val => {
                               const updated = [...editingCombo.rules];
-                              updated[idx] = { ...updated[idx], reward: parseFloat(e.target.value) || 0 };
+                              updated[idx] = { ...updated[idx], reward: val };
                               setEditingCombo({ ...editingCombo, rules: updated });
                             }}
                             className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded font-mono"
@@ -1756,16 +1903,16 @@ export const ComboActivitiesView: React.FC = () => {
                         </div>
                       </div>
                       <div>
-                        <label className="text-3xs text-slate-400">规则说明</label>
-                        <input
-                          type="text"
+                        <label className="text-3xs text-slate-400">规则说明 (支持换行)</label>
+                        <textarea
+                          rows={2}
                           value={rule.notes || ''}
                           onChange={e => {
                             const updated = [...editingCombo.rules];
                             updated[idx] = { ...updated[idx], notes: e.target.value };
                             setEditingCombo({ ...editingCombo, rules: updated });
                           }}
-                          className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded"
+                          className="w-full px-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded resize-y"
                         />
                       </div>
                     </div>
@@ -1858,7 +2005,7 @@ export const ComboActivitiesView: React.FC = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">发卡银行 / 机构</label>
                   <input
@@ -1881,21 +2028,44 @@ export const ComboActivitiesView: React.FC = () => {
                     <option value="any">通用/跨卡种</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">指定支付渠道</label>
-                  <select
-                    value={newActivityChannel}
-                    onChange={e => setNewActivityChannel(e.target.value)}
-                    className="w-full px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+              </div>
+
+              {/* Multi-select Payment Channels */}
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-2xs font-semibold text-slate-700 dark:text-slate-300">
+                    指定支付渠道 <span className="font-normal text-slate-400">(支持多选，如支付宝+微信+抖音)</span>
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setNewActivityChannels(['any'])}
+                    className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                      newActivityChannels.includes('any')
+                        ? 'bg-slate-900 text-white border-slate-900 dark:bg-white dark:text-slate-900 dark:border-white font-bold'
+                        : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
                   >
-                    <option value="alipay">支付宝快捷支付</option>
-                    <option value="wechat">微信支付</option>
-                    <option value="unionpay">银联云闪付</option>
-                    <option value="transit_code">乘车码</option>
-                    <option value="bank_app">银行App</option>
-                    <option value="digital_cny">数字人民币</option>
-                    <option value="any">不限渠道</option>
-                  </select>
+                    不限渠道
+                  </button>
+                  {PAYMENT_CHANNEL_OPTIONS.map(opt => {
+                    const selected = !newActivityChannels.includes('any') && newActivityChannels.includes(opt.value);
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNewActivityChannels(prev => toggleChannelSelection(prev, opt.value))}
+                        className={`px-2.5 py-1 text-2xs rounded-lg border transition-colors ${
+                          selected
+                            ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                            : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                        }`}
+                      >
+                        {selected ? `✓ ${opt.label}` : opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1958,12 +2128,20 @@ export const ComboActivitiesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则说明</label>
-                <input
-                  type="text"
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-slate-700 dark:text-slate-300 font-medium">
+                    活动规则说明与注意事项 <span className="text-2xs font-normal text-slate-400">(支持回车换行，展示于活动卡面)</span>
+                  </label>
+                </div>
+                <p className="text-3xs text-slate-500 dark:text-slate-400 mb-1.5 leading-relaxed">
+                  用途：仅用于备忘官方细则防踩坑（不直接参与数值计算）。建议填写：① 报名/领券路径；② 单笔门槛与排除项（如转账/红包/缴费）；③ 名额限制及达标后领奖途径/有效期。
+                </p>
+                <textarea
+                  rows={4}
                   value={newActivityNotes}
                   onChange={e => setNewActivityNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  placeholder={'示例：\n报名路径：银行App活动专区报名参与\n限制条件：单笔满10元计入，不含转账、缴费与零钱通充值\n领奖方式：达标后在活动页领立减金，7天有效'}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white leading-relaxed resize-y"
                 />
               </div>
 
@@ -1974,13 +2152,13 @@ export const ComboActivitiesView: React.FC = () => {
                   {newActivityTiers.map((tier, idx) => (
                     <div key={idx} className="flex items-center gap-2">
                       <span className="text-2xs text-slate-400 font-mono w-10">档位{idx + 1}</span>
-                      <input
-                        type="number"
+                      <NumericInput
+                        min={0}
                         placeholder="门槛(元)"
                         value={tier.target}
-                        onChange={e => {
+                        onValueChange={val => {
                           const updated = [...newActivityTiers];
-                          updated[idx].target = parseFloat(e.target.value) || 0;
+                          updated[idx] = { ...updated[idx], target: val };
                           setNewActivityTiers(updated);
                         }}
                         className="w-24 px-2 py-1.5 font-mono text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
@@ -1991,18 +2169,18 @@ export const ComboActivitiesView: React.FC = () => {
                         value={tier.rewardName}
                         onChange={e => {
                           const updated = [...newActivityTiers];
-                          updated[idx].rewardName = e.target.value;
+                          updated[idx] = { ...updated[idx], rewardName: e.target.value };
                           setNewActivityTiers(updated);
                         }}
                         className="flex-1 px-2 py-1.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                       />
-                      <input
-                        type="number"
+                      <NumericInput
+                        min={0}
                         placeholder="折合价值(元)"
                         value={tier.estimatedReward}
-                        onChange={e => {
+                        onValueChange={val => {
                           const updated = [...newActivityTiers];
-                          updated[idx].estimatedReward = parseFloat(e.target.value) || 0;
+                          updated[idx] = { ...updated[idx], estimatedReward: val };
                           setNewActivityTiers(updated);
                         }}
                         className="w-20 px-2 py-1.5 font-mono text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"

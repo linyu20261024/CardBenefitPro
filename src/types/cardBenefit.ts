@@ -98,6 +98,7 @@ export interface MilestoneActivity {
   includedCardTypes?: CardType[]; // 组合活动特别说明时可同时计入的卡种列表
   platform: string;
   channel: string;
+  channels?: string[]; // 支持多选指定支付渠道（如支付宝、微信、抖音、云闪付等）
   scene: string;
   start: string;
   end: string;

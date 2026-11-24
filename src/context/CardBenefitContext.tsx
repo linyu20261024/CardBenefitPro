@@ -18,7 +18,8 @@ import {
   getLocalDateString,
   inferCardType,
   isCardTypeCompatible,
-  normalizeKey
+  normalizeKey,
+  getActivityChannels
 } from '../utils/engine';
 
 const STORAGE_KEY = 'card_benefit_pro_user_data';
@@ -93,9 +94,11 @@ function reconcileIncompatibleActivitySpend(
       if (act) {
         const actCardType = inferCardType(act);
         const cardOk = isCardTypeCompatible(fCardType, actCardType, act.includedCardTypes, act.bank);
-        const normActChannel = normalizeKey(act.channel) || 'any';
+        const actChannels = getActivityChannels(act);
         const channelOk =
-          normActChannel === 'any' || (fChannel !== 'any' && normActChannel === fChannel);
+          actChannels.includes('any') ||
+          fChannel === 'any' ||
+          actChannels.includes(fChannel);
         const normActScene = normalizeKey(act.scene) || 'any';
         const sceneOk =
           normActScene === 'any' || fScene === 'any' || normActScene === fScene;
@@ -501,6 +504,7 @@ export const CardBenefitProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const mergedActivities = (targetState.activities || []).map((a: any) => ({
         ...a,
         bank: a.bank || inferBankName(a.name || ''),
+        channels: Array.isArray(a.channels) && a.channels.length > 0 ? a.channels : (a.channel ? [a.channel] : ['any']),
         currentSpend: a.currentSpend ?? 0
       }));
 

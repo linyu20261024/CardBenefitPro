@@ -13,6 +13,7 @@ import {
   getMonthEndDateString
 } from '../utils/engine';
 import { BankAssetActivity, BankAssetEntry, BankAssetTier } from '../types/cardBenefit';
+import { NumericInput } from './NumericInput';
 import {
   Landmark,
   TrendingUp,
@@ -568,13 +569,13 @@ export const AssetMilestonesView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">基准资产 (元)</label>
-                  <input
-                    type="number"
+                  <NumericInput
+                    min={0}
                     value={editingAssetActivity.baseline}
-                    onChange={e =>
+                    onValueChange={val =>
                       setEditingAssetActivity({
                         ...editingAssetActivity,
-                        baseline: parseFloat(e.target.value) || 0
+                        baseline: val
                       })
                     }
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
@@ -592,12 +593,14 @@ export const AssetMilestonesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
-                <input
-                  type="text"
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                  活动规则说明与注意事项 <span className="text-2xs font-normal text-slate-400">(支持回车换行)</span>
+                </label>
+                <textarea
+                  rows={3}
                   value={editingAssetActivity.notes}
                   onChange={e => setEditingAssetActivity({ ...editingAssetActivity, notes: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white resize-y"
                 />
               </div>
 
@@ -637,12 +640,12 @@ export const AssetMilestonesView: React.FC = () => {
                     >
                       <span className="text-2xs font-mono text-slate-400 w-8">#{idx + 1}</span>
                       <div className="w-28">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.threshold}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...editingAssetActivity.tiers];
-                            updated[idx] = { ...updated[idx], threshold: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], threshold: val };
                             setEditingAssetActivity({ ...editingAssetActivity, tiers: updated });
                           }}
                           placeholder="日均门槛(元)"
@@ -663,12 +666,12 @@ export const AssetMilestonesView: React.FC = () => {
                         />
                       </div>
                       <div className="w-20">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.reward}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...editingAssetActivity.tiers];
-                            updated[idx] = { ...updated[idx], reward: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], reward: val };
                             setEditingAssetActivity({ ...editingAssetActivity, tiers: updated });
                           }}
                           placeholder="价值(元)"
@@ -759,10 +762,10 @@ export const AssetMilestonesView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">基准资产 (元)</label>
-                  <input
-                    type="number"
+                  <NumericInput
+                    min={0}
                     value={newBaseline}
-                    onChange={e => setNewBaseline(parseFloat(e.target.value) || 0)}
+                    onValueChange={val => setNewBaseline(val)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-mono"
                   />
                 </div>
@@ -778,12 +781,14 @@ export const AssetMilestonesView: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">活动规则备注</label>
-                <input
-                  type="text"
+                <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
+                  活动规则说明与注意事项 <span className="text-2xs font-normal text-slate-400">(支持回车换行)</span>
+                </label>
+                <textarea
+                  rows={3}
                   value={newNotes}
                   onChange={e => setNewNotes(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white resize-y"
                 />
               </div>
 
@@ -814,12 +819,12 @@ export const AssetMilestonesView: React.FC = () => {
                     >
                       <span className="text-2xs font-mono text-slate-400 w-8">#{idx + 1}</span>
                       <div className="w-28">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.threshold}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...newTiers];
-                            updated[idx] = { ...updated[idx], threshold: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], threshold: val };
                             setNewTiers(updated);
                           }}
                           placeholder="门槛(元)"
@@ -840,12 +845,12 @@ export const AssetMilestonesView: React.FC = () => {
                         />
                       </div>
                       <div className="w-20">
-                        <input
-                          type="number"
+                        <NumericInput
+                          min={0}
                           value={tier.reward}
-                          onChange={e => {
+                          onValueChange={val => {
                             const updated = [...newTiers];
-                            updated[idx] = { ...updated[idx], reward: parseFloat(e.target.value) || 0 };
+                            updated[idx] = { ...updated[idx], reward: val };
                             setNewTiers(updated);
                           }}
                           placeholder="价值"

@@ -15,6 +15,7 @@ import {
   inferCardType
 } from '../utils/engine';
 import { FeedbackRecord, InstantRule, CardType } from '../types/cardBenefit';
+import { NumericInput } from './NumericInput';
 import {
   History,
   Plus,
@@ -707,21 +708,19 @@ export const LedgerFeedbackView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费金额 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={newFeedbackData.amount}
-                    onChange={e => setNewFeedbackData({ ...newFeedbackData, amount: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setNewFeedbackData({ ...newFeedbackData, amount: val })}
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">实际优惠 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={newFeedbackData.actual}
-                    onChange={e => setNewFeedbackData({ ...newFeedbackData, actual: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setNewFeedbackData({ ...newFeedbackData, actual: val })}
                     className="w-full px-3 py-2 font-mono text-emerald-600 font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                   />
                 </div>
@@ -843,21 +842,19 @@ export const LedgerFeedbackView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">消费金额 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={editingFeedback.amount}
-                    onChange={e => setEditingFeedback({ ...editingFeedback, amount: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setEditingFeedback({ ...editingFeedback, amount: val })}
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">实际优惠 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={editingFeedback.actual}
-                    onChange={e => setEditingFeedback({ ...editingFeedback, actual: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setEditingFeedback({ ...editingFeedback, actual: val })}
                     className="w-full px-3 py-2 font-mono text-emerald-600 font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg"
                   />
                 </div>
@@ -1032,12 +1029,10 @@ export const LedgerFeedbackView: React.FC = () => {
                       ? '赠送积分数量 (点)'
                       : '优惠金额 (元)'}
                   </label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={editRuleData.type === 'rate' ? editRuleData.rate : editRuleData.fixed}
-                    onChange={e => {
-                      const val = parseFloat(e.target.value) || 0;
+                    onValueChange={val => {
                       if (editRuleData.type === 'rate') {
                         setEditRuleData({ ...editRuleData, rate: val });
                       } else {
@@ -1049,12 +1044,10 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">满减/起用门槛 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={editRuleData.min}
-                    onChange={e => setEditRuleData({ ...editRuleData, min: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setEditRuleData({ ...editRuleData, min: val })}
                     placeholder="0为无门槛"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
@@ -1063,12 +1056,10 @@ export const LedgerFeedbackView: React.FC = () => {
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
                     {editRuleData.type === 'points' ? '单笔积分封顶 (分)' : '单笔优惠封顶 (元)'}
                   </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={editRuleData.cap ?? 0}
-                    onChange={e => setEditRuleData({ ...editRuleData, cap: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setEditRuleData({ ...editRuleData, cap: val })}
                     placeholder="0为不封顶"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
@@ -1512,12 +1503,10 @@ export const LedgerFeedbackView: React.FC = () => {
                       ? '赠送积分数量 (点)'
                       : '优惠数值/立减额 (元)'}
                   </label>
-                  <input
-                    type="number"
-                    step="any"
+                  <NumericInput
+                    min={0}
                     value={newRuleData.type === 'rate' ? (newRuleData.rate ?? 0) : (newRuleData.fixed ?? 0)}
-                    onChange={e => {
-                      const val = parseFloat(e.target.value) || 0;
+                    onValueChange={val => {
                       if (newRuleData.type === 'rate') {
                         setNewRuleData({ ...newRuleData, rate: val });
                       } else {
@@ -1529,12 +1518,10 @@ export const LedgerFeedbackView: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">门槛金额 (元)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={newRuleData.min}
-                    onChange={e => setNewRuleData({ ...newRuleData, min: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setNewRuleData({ ...newRuleData, min: val })}
                     placeholder="0为无门槛"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />
@@ -1543,12 +1530,10 @@ export const LedgerFeedbackView: React.FC = () => {
                   <label className="block text-slate-700 dark:text-slate-300 font-medium mb-1">
                     {newRuleData.type === 'points' ? '单笔积分封顶 (分)' : '单笔优惠封顶 (元)'}
                   </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0"
+                  <NumericInput
+                    min={0}
                     value={newRuleData.cap ?? 0}
-                    onChange={e => setNewRuleData({ ...newRuleData, cap: parseFloat(e.target.value) || 0 })}
+                    onValueChange={val => setNewRuleData({ ...newRuleData, cap: val })}
                     placeholder="0为不封顶"
                     className="w-full px-3 py-2 font-mono bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                   />

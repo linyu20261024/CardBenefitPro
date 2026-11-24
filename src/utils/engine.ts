@@ -32,8 +32,44 @@ export const CARD_TYPE_LABELS: Record<CardType, string> = {
   any: '通用/组合'
 };
 
+export const PAYMENT_CHANNEL_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: 'alipay', label: '支付宝' },
+  { value: 'wechat', label: '微信支付' },
+  { value: 'unionpay', label: '云闪付/银联' },
+  { value: 'douyin', label: '抖音支付' },
+  { value: 'jd', label: '京东支付' },
+  { value: 'meituan', label: '美团支付' },
+  { value: 'pinduoduo', label: '多多支付' },
+  { value: 'mobile_pay', label: '手机Pay' },
+  { value: 'bank_app', label: '银行App' },
+  { value: 'transit_code', label: '乘车码' },
+  { value: 'digital_cny', label: '数字人民币' }
+];
+
 export function normalizeKey(val?: string): string {
   return (val || '').trim().toLowerCase().replace(/-/g, '_');
+}
+
+export function getChannelLabel(ch: string): string {
+  const norm = normalizeKey(ch);
+  if (!norm || norm === 'any') return '不限渠道';
+  const matched = PAYMENT_CHANNEL_OPTIONS.find(opt => opt.value === norm);
+  return matched ? matched.label : ch;
+}
+
+export function getActivityChannels(act: { channel?: string; channels?: string[] }): string[] {
+  if (act.channels && act.channels.length > 0) {
+    const cleaned = act.channels.map(c => normalizeKey(c)).filter(Boolean);
+    if (cleaned.length > 0) return Array.from(new Set(cleaned));
+  }
+  const single = normalizeKey(act.channel);
+  return single ? [single] : ['any'];
+}
+
+export function formatChannelList(act: { channel?: string; channels?: string[] }): string {
+  const list = getActivityChannels(act);
+  if (list.includes('any')) return '不限渠道';
+  return list.map(getChannelLabel).join(' · ');
 }
 
 /**
@@ -505,10 +541,10 @@ export function evaluateRecommendations(
         (act.bank === '支付宝' && effectiveRuleChannel === 'alipay' && ruleCardType !== 'digital_cny');
       if (!bankMatches) continue;
 
-      const normActChannel = normalizeKey(act.channel) || 'any';
+      const actChannels = getActivityChannels(act);
       const channelMatches =
-        normActChannel === 'any' ||
-        (effectiveRuleChannel !== 'any' && normActChannel === effectiveRuleChannel);
+        actChannels.includes('any') ||
+        (effectiveRuleChannel !== 'any' && actChannels.includes(effectiveRuleChannel));
       if (!channelMatches) continue;
 
       const normActScene = normalizeKey(act.scene) || 'any';
@@ -634,11 +670,11 @@ export function evaluateRecommendations(
       continue;
     }
 
-    const normActChannel = normalizeKey(act.channel) || 'any';
+    const actChannels = getActivityChannels(act);
     if (normQueryChannel === 'digital_cny' && actCardType !== 'digital_cny' && !act.includedCardTypes?.includes('digital_cny')) {
       continue;
     }
-    if (normActChannel !== 'any' && normQueryChannel !== 'any' && normActChannel !== normQueryChannel) {
+    if (!actChannels.includes('any') && normQueryChannel !== 'any' && !actChannels.includes(normQueryChannel)) {
       continue;
     }
 
