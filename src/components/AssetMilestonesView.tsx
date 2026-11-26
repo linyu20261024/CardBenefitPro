@@ -359,7 +359,7 @@ export const AssetMilestonesView: React.FC = () => {
             </div>
 
             {/* Asset Tiers Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 pt-2">
               {selectedActivity.tiers.map((tier, idx) => {
                 const isProjectedAchieved = metrics.projectedMonthEndAverage >= tier.threshold;
                 const isCurrentAchieved = metrics.currentAverageDaily >= tier.threshold;
@@ -367,7 +367,7 @@ export const AssetMilestonesView: React.FC = () => {
                 return (
                   <div
                     key={idx}
-                    className={`p-3.5 rounded-xl border transition-all ${
+                    className={`p-2.5 sm:p-3.5 rounded-xl border transition-all ${
                       isCurrentAchieved
                         ? 'bg-emerald-500/20 border-emerald-400/50 text-white'
                         : isProjectedAchieved
@@ -375,21 +375,21 @@ export const AssetMilestonesView: React.FC = () => {
                         : 'bg-white/5 border-white/10 text-slate-300'
                     }`}
                   >
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-bold font-mono">月日均 满 ¥{formatBigNumber(tier.threshold)}</span>
+                    <div className="flex items-center justify-between text-2xs sm:text-xs mb-1 gap-1">
+                      <span className="font-bold font-mono truncate">满 ¥{formatBigNumber(tier.threshold)}</span>
                       {isCurrentAchieved ? (
-                        <span className="flex items-center gap-1 text-2xs font-semibold text-emerald-300">
-                          <CheckCircle2 className="w-3.5 h-3.5" /> 已锁定
+                        <span className="flex items-center gap-0.5 text-3xs sm:text-2xs font-semibold text-emerald-300 shrink-0">
+                          <CheckCircle2 className="w-3 h-3" /> 已锁
                         </span>
                       ) : isProjectedAchieved ? (
-                        <span className="text-2xs font-semibold text-amber-300">预测可达</span>
+                        <span className="text-3xs sm:text-2xs font-semibold text-amber-300 shrink-0">可达</span>
                       ) : (
-                        <span className="text-2xs text-slate-400">待冲刺</span>
+                        <span className="text-3xs sm:text-2xs text-slate-400 shrink-0">冲刺</span>
                       )}
                     </div>
-                    <div className="text-xs font-semibold text-white mt-1">{tier.label}</div>
-                    <div className="text-2xs text-slate-400 mt-1">
-                      折合价值: ¥{tier.reward} · {tier.rewardType === 'cash' ? '现金/立减金' : '积分'}
+                    <div className="text-2xs sm:text-xs font-semibold text-white mt-0.5 line-clamp-1">{tier.label}</div>
+                    <div className="text-3xs sm:text-2xs text-slate-400 mt-0.5 truncate">
+                      ¥{tier.reward} · {tier.rewardType === 'cash' ? '现金/立减金' : '积分'}
                     </div>
                   </div>
                 );
